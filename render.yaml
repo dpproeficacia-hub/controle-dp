@@ -15,8 +15,9 @@ services:
           name: dpsmart-db
           property: connectionString
 
-  - type: static
+  - type: web
     name: dpsmart-frontend
+    runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
     staticPublishPath: dist
