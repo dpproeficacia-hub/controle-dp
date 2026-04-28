@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const bcrypt = require('bcryptjs');
 
 const authRoutes = require('./src/routes/auth');
@@ -15,14 +14,14 @@ const { PrismaClient } = require('@prisma/client');
 const app = express();
 const prisma = new PrismaClient();
 
-app.use(cors({
-  origin: '*',
-  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
-  allowedHeaders: ['Content-Type','Authorization'],
-  credentials: false
-}));
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
-app.options('*', cors());
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
@@ -30,7 +29,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
 app.get('/setup', async (req, res) => {
   try {
     const existe = await prisma.usuario.findUnique({ where: { email: 'admin@dpsmart.com' } });
-    if (existe) return res.json({ ok: false, msg: 'Admin já existe. Faça login normalmente.' });
+    if (existe) return res.json({ ok: false, msg: 'Admin já existe.' });
     const senha = await bcrypt.hash('Admin@123', 10);
     await prisma.usuario.create({
       data: { nome: 'Administrador', email: 'admin@dpsmart.com', senha, nivel: 'ADMIN' }
