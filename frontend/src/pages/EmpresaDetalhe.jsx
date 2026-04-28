@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import api from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 const fmtMoeda = v => v ? `R$ ${Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2})}` : '';
 const parseMoeda = v => parseFloat(v.replace(/[^\d,]/g,'').replace(',','.')) || null;
@@ -10,20 +11,26 @@ export default function EmpresaDetalhe() {
   const { empresaId } = useParams();
   const { state } = useLocation();
   const navigate = useNavigate();
+  const { isGestor } = useAuth();
   const competencia = state?.competencia || new Date().toISOString().slice(0,7);
 
   const [empresa, setEmpresa] = useState(null);
   const [historico, setHistorico] = useState(null);
+  const [tarefasExtras, setTarefasExtras] = useState([]);
+  const [novaTarefa, setNovaTarefa] = useState('');
+  const [adicionandoTarefa, setAdicionandoTarefa] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.get(`/empresas/${empresaId}`),
-      api.get(`/mensal/${competencia}/${empresaId}`)
-    ]).then(([e, h]) => {
+      api.get(`/mensal/${competencia}/${empresaId}`),
+      api.get(`/tarefas/${empresaId}`)
+    ]).then(([e, h, t]) => {
       setEmpresa(e.data);
       setHistorico(h.data);
+      setTarefasExtras(t.data);
     });
   }, [empresaId, competencia]);
 
@@ -37,10 +44,51 @@ export default function EmpresaDetalhe() {
     setSalvo(false);
   }
 
+  function toggleTarefaExtra(tarefaId) {
+    setHistorico(h => ({
+      ...h,
+      tarefasOk: h.tarefasOk
+        ? h.tarefasOk.map(t => t.tarefaId === tarefaId ? { ...t, ok: !t.ok } : t)
+        : [{ tarefaId, ok: true }]
+    }));
+    setSalvo(false);
+  }
+
+  function isTarefaOk(tarefaId) {
+    if (!historico?.tarefasOk) return false;
+    const t = historico.tarefasOk.find(t => t.tarefaId === tarefaId);
+    return t?.ok || false;
+  }
+
+  async function adicionarTarefa() {
+    if (!novaTarefa.trim()) return;
+    setAdicionandoTarefa(true);
+    try {
+      const { data } = await api.post(`/tarefas/${empresaId}`, { nome: novaTarefa.trim() });
+      setTarefasExtras(t => [...t, data]);
+      setNovaTarefa('');
+    } finally {
+      setAdicionandoTarefa(false);
+    }
+  }
+
+  async function removerTarefa(id) {
+    if (!window.confirm('Remover esta tarefa?')) return;
+    await api.delete(`/tarefas/${id}`);
+    setTarefasExtras(t => t.filter(x => x.id !== id));
+  }
+
   async function salvar() {
     setSalvando(true);
     try {
-      const { data } = await api.post(`/mensal/${competencia}/${empresaId}`, historico);
+      const payload = {
+        ...historico,
+        tarefasExtrasOk: tarefasExtras.map(t => ({
+          tarefaId: t.id,
+          ok: isTarefaOk(t.id)
+        }))
+      };
+      const { data } = await api.post(`/mensal/${competencia}/${empresaId}`, payload);
       setHistorico(data);
       setSalvo(true);
       setTimeout(() => setSalvo(false), 2500);
@@ -74,8 +122,12 @@ export default function EmpresaDetalhe() {
     : empresa.temProLabore ? camposProLabore
     : camposSemMov;
 
-  const total = campos.length;
-  const feitos = campos.filter(c => historico[c.key]).length;
+  const totalObrig = campos.length;
+  const feitosObrig = campos.filter(c => historico[c.key]).length;
+  const totalExtras = tarefasExtras.length;
+  const feitosExtras = tarefasExtras.filter(t => isTarefaOk(t.id)).length;
+  const total = totalObrig + totalExtras;
+  const feitos = feitosObrig + feitosExtras;
   const pct = total ? Math.round((feitos/total)*100) : 0;
 
   const totalFinanceiro = [historico.valorInss, historico.valorFgts, historico.valorIr]
@@ -83,14 +135,12 @@ export default function EmpresaDetalhe() {
 
   return (
     <div>
-      {/* Breadcrumb */}
       <div className="flex items-center gap-1.5 text-xs text-faint mb-5">
         <button onClick={() => navigate('/mensal')} className="text-blue-600 hover:underline">Controle Mensal</button>
         <span>›</span>
         <span className="text-ink font-medium">{empresa.razaoSocial}</span>
       </div>
 
-      {/* Cabeçalho da empresa */}
       <div className="card p-5 mb-4 flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-ink flex items-center justify-center font-display font-bold text-lg text-bg flex-shrink-0">
@@ -98,7 +148,7 @@ export default function EmpresaDetalhe() {
           </div>
           <div>
             <h2 className="font-display font-bold text-lg text-ink">{empresa.razaoSocial}</h2>
-            <p className="text-xs text-faint mt-0.5">{fmtCNPJ(empresa.cnpj)} · {empresa.enquadramento.replace('_',' ')} · {empresa.tipo}</p>
+            <p className="text-xs text-faint mt-0.5">{fmtCNPJ(empresa.cnpj)} · {empresa.enquadramento.replace(/_/g,' ')} · {empresa.tipo}</p>
             <div className="flex gap-1.5 mt-2 flex-wrap">
               {empresa.temFuncionarios && <span className="pill pill-green">Com funcionários</span>}
               {empresa.temProLabore && <span className="pill pill-blue">Pró-labore</span>}
@@ -118,7 +168,6 @@ export default function EmpresaDetalhe() {
 
       <div className="grid grid-cols-[1fr_300px] gap-4">
         <div>
-          {/* Checklist */}
           <div className="card mb-4">
             <div className="card-header">
               <span className="card-title">Folha de Pagamento — {competencia}</span>
@@ -152,8 +201,52 @@ export default function EmpresaDetalhe() {
                   </span>
                 </div>
               ))}
+
+              {tarefasExtras.length > 0 && (
+                <>
+                  <div className="px-5 py-2 bg-surface2 border-t border-b border-border">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-faint">Tarefas extras</span>
+                  </div>
+                  {tarefasExtras.map(t => (
+                    <div key={t.id} onClick={() => toggleTarefaExtra(t.id)}
+                      className={`check-item ${isTarefaOk(t.id)?'done':''}`}>
+                      <div className={`check-box ${isTarefaOk(t.id)?'done':''}`}>
+                        {isTarefaOk(t.id) && (
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+                            <path d="M2 6l3 3 5-5" stroke="#F4F3EF" strokeWidth="1.8" strokeLinecap="round"/>
+                          </svg>
+                        )}
+                      </div>
+                      <span className="check-label flex-1 text-sm font-medium">{t.nome}</span>
+                      <span className={`pill ml-2 ${isTarefaOk(t.id)?'pill-green':'pill-gray'}`}>
+                        {isTarefaOk(t.id)?'OK':'—'}
+                      </span>
+                      {isGestor && (
+                        <button onClick={e => { e.stopPropagation(); removerTarefa(t.id); }}
+                          className="ml-2 text-xs text-red-400 hover:text-red-600">✕</button>
+                      )}
+                    </div>
+                  ))}
+                </>
+              )}
+
+              {isGestor && (
+                <div className="px-5 py-3 border-t border-border flex items-center gap-2">
+                  <input
+                    className="input flex-1 h-8 text-xs"
+                    placeholder="+ Adicionar tarefa extra (ex: Relatório de líquidos)"
+                    value={novaTarefa}
+                    onChange={e => setNovaTarefa(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && adicionarTarefa()}
+                  />
+                  <button onClick={adicionarTarefa} disabled={adicionandoTarefa || !novaTarefa.trim()}
+                    className="btn btn-secondary text-xs h-8 px-3">
+                    {adicionandoTarefa ? '...' : 'Adicionar'}
+                  </button>
+                </div>
+              )}
             </div>
-            {/* Datas e salvar */}
+
             <div className="px-5 py-3 bg-surface2 border-t border-border flex items-end gap-5">
               <div>
                 <label className="label">Entrega da folha</label>
@@ -174,7 +267,6 @@ export default function EmpresaDetalhe() {
             </div>
           </div>
 
-          {/* Observações */}
           {empresa.observacoes && (
             <div className="card p-4">
               <p className="label mb-2">Observações</p>
@@ -185,9 +277,7 @@ export default function EmpresaDetalhe() {
           )}
         </div>
 
-        {/* Sidebar */}
         <div className="flex flex-col gap-4">
-          {/* Status */}
           <div className="card p-4 text-center">
             <p className="font-display font-bold text-4xl" style={{color: pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D'}}>{pct}%</p>
             <p className="text-xs text-faint mt-1">
@@ -198,12 +288,11 @@ export default function EmpresaDetalhe() {
             </div>
             {pct < 100 && (
               <p className="text-xs text-faint mt-2">
-                Falta: {campos.filter(c => !historico[c.key]).map(c=>c.label).join(', ')}
+                {feitos}/{total} tarefas concluídas
               </p>
             )}
           </div>
 
-          {/* Resumo financeiro */}
           <div className="card">
             <div className="card-header"><span className="card-title">Resumo Financeiro</span></div>
             <div className="p-4 space-y-2.5">
@@ -220,7 +309,6 @@ export default function EmpresaDetalhe() {
             </div>
           </div>
 
-          {/* CCT */}
           {empresa.sindical && (
             <div className="card">
               <div className="card-header"><span className="card-title">Controle Sindical</span></div>
@@ -232,7 +320,7 @@ export default function EmpresaDetalhe() {
                 ].map(([l,v]) => (
                   <div key={l} className="flex justify-between text-xs">
                     <span className="text-faint">{l}</span>
-                    <span className="font-medium">{v}</span>
+                    <span className="font-medium text-right max-w-[160px]">{v}</span>
                   </div>
                 ))}
                 <div className="flex justify-between text-xs">
