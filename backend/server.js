@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const bcrypt = require('bcryptjs');
+const { PrismaClient } = require('@prisma/client');
 
 const authRoutes = require('./src/routes/auth');
 const empresasRoutes = require('./src/routes/empresas');
@@ -9,7 +10,6 @@ const sindicalRoutes = require('./src/routes/sindical');
 const responsaveisRoutes = require('./src/routes/responsaveis');
 const dashboardRoutes = require('./src/routes/dashboard');
 const tarefasRoutes = require('./src/routes/tarefas');
-const { PrismaClient } = require('@prisma/client');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -24,7 +24,7 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
+app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
 app.get('/setup', async (req, res) => {
   try {
@@ -34,7 +34,7 @@ app.get('/setup', async (req, res) => {
     await prisma.usuario.create({
       data: { nome: 'Administrador', email: 'admin@dpsmart.com', senha, nivel: 'ADMIN' }
     });
-    res.json({ ok: true, msg: 'Admin criado! Email: admin@dpsmart.com / Senha: Admin@123' });
+    res.json({ ok: true, msg: 'Admin criado!' });
   } catch (e) {
     res.status(500).json({ ok: false, erro: e.message });
   }
@@ -50,8 +50,8 @@ app.use('/api/tarefas', tarefasRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ error: 'Erro interno do servidor' });
+  res.status(500).json({ error: 'Erro interno' });
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`DPSmart API rodando na porta ${PORT}`));
+app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
