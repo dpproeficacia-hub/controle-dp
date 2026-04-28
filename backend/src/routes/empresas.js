@@ -7,16 +7,19 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-// Listar empresas (operador vê só as suas, gestor/admin vê todas)
 router.get('/', async (req, res) => {
-  const { responsavelId, nivel, tipo, semMovimento, temFuncionarios, temProLabore, enviaReinf, fatorR } = req.query;
+  const { responsavelId, nivel, tipo, semMovimento, temFuncionarios, temProLabore, enviaReinf, fatorR, incluirSaiu } = req.query;
 
   const where = { ativa: true };
 
   if (req.user.nivel === 'OPERADOR') {
     where.responsavelId = req.user.id;
-  } else if (responsavelId) {
-    where.responsavelId = responsavelId;
+    where.saiuDoEscritorio = false;
+  } else {
+    if (!incluirSaiu || incluirSaiu === 'false') {
+      where.saiuDoEscritorio = false;
+    }
+    if (responsavelId) where.responsavelId = responsavelId;
   }
 
   if (nivel) where.nivel = nivel;
@@ -40,7 +43,6 @@ router.get('/', async (req, res) => {
   res.json(empresas);
 });
 
-// Buscar empresa por id
 router.get('/:id', async (req, res) => {
   const empresa = await prisma.empresa.findUnique({
     where: { id: req.params.id },
@@ -54,12 +56,11 @@ router.get('/:id', async (req, res) => {
   res.json(empresa);
 });
 
-// Criar empresa
 router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   const {
     razaoSocial, cnpj, enquadramento, tipo, nivel, prazoEntrega,
     temFuncionarios, temProLabore, semMovimento, temFilial,
-    fatorR, enviaReinf, observacoes, responsavelId, sindical, filiais
+    fatorR, enviaReinf, observacoes, responsavelId
   } = req.body;
 
   const cnpjLimpo = cnpj.replace(/\D/g, '');
@@ -70,8 +71,6 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       nivel: nivel || 'N3',
       prazoEntrega, temFuncionarios, temProLabore, semMovimento,
       temFilial, fatorR, enviaReinf, observacoes, responsavelId,
-      sindical: sindical ? { create: sindical } : undefined,
-      filiais: filiais?.length ? { create: filiais } : undefined,
     },
     include: { responsavel: { select: { id: true, nome: true } }, sindical: true, filiais: true }
   });
@@ -79,7 +78,6 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   res.status(201).json(empresa);
 });
 
-// Atualizar empresa
 router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   const { sindical, filiais, ...dados } = req.body;
   if (dados.cnpj) dados.cnpj = dados.cnpj.replace(/\D/g, '');
@@ -93,7 +91,15 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   res.json(empresa);
 });
 
-// Inativar empresa
+router.patch('/:id/saiu', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  const { saiuDoEscritorio } = req.body;
+  const empresa = await prisma.empresa.update({
+    where: { id: req.params.id },
+    data: { saiuDoEscritorio }
+  });
+  res.json(empresa);
+});
+
 router.delete('/:id', requireNivel('ADMIN'), async (req, res) => {
   await prisma.empresa.update({ where: { id: req.params.id }, data: { ativa: false } });
   res.json({ ok: true });
