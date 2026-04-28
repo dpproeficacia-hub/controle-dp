@@ -9,6 +9,7 @@ import Empresas from './pages/Empresas';
 import EmpresaForm from './pages/EmpresaForm';
 import Sindical from './pages/Sindical';
 import Responsaveis from './pages/Responsaveis';
+import Identidade from './pages/Identidade';
 
 function Protegido({ children }) {
   const { usuario, carregando } = useAuth();
@@ -39,6 +40,7 @@ export default function App() {
             <Route path="empresas/:id/editar" element={<EmpresaForm />} />
             <Route path="sindical" element={<Sindical />} />
             <Route path="responsaveis" element={<Responsaveis />} />
+            <Route path="identidade" element={<Identidade />} />
           </Route>
         </Routes>
       </BrowserRouter>
