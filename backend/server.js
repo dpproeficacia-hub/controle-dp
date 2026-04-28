@@ -9,6 +9,7 @@ const mensalRoutes = require('./src/routes/mensal');
 const sindicalRoutes = require('./src/routes/sindical');
 const responsaveisRoutes = require('./src/routes/responsaveis');
 const dashboardRoutes = require('./src/routes/dashboard');
+const tarefasRoutes = require('./src/routes/tarefas');
 const { PrismaClient } = require('@prisma/client');
 
 const app = express();
@@ -46,6 +47,7 @@ app.use('/api/mensal', mensalRoutes);
 app.use('/api/sindical', sindicalRoutes);
 app.use('/api/responsaveis', responsaveisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/tarefas', tarefasRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
