@@ -17,6 +17,11 @@ export default function EmpresaForm() {
     temFuncionarios:false, temProLabore:false, semMovimento:false,
     temFilial:false, fatorR:false, enviaReinf:false, observacoes:''
   });
+
+  const [sindical, setSindical] = useState({
+    sindicato:'', dataBase:'', ultimaCct: new Date().getFullYear(), reajusteAplicado: false
+  });
+
   const [responsaveis, setResponsaveis] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
@@ -34,18 +39,35 @@ export default function EmpresaForm() {
           semMovimento: d.semMovimento, temFilial: d.temFilial,
           fatorR: d.fatorR, enviaReinf: d.enviaReinf, observacoes: d.observacoes || ''
         });
+        if (d.sindical) {
+          setSindical({
+            sindicato: d.sindical.sindicato || '',
+            dataBase: d.sindical.dataBase || '',
+            ultimaCct: d.sindical.ultimaCct || new Date().getFullYear(),
+            reajusteAplicado: d.sindical.reajusteAplicado || false
+          });
+        }
       });
     }
   }, [id]);
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const setSind = (k, v) => setSindical(f => ({ ...f, [k]: v }));
 
   async function salvar(e) {
     e.preventDefault();
     setSalvando(true); setErro('');
     try {
-      if (isEdicao) await api.put(`/empresas/${id}`, form);
-      else await api.post('/empresas', form);
+      let empresaId = id;
+      if (isEdicao) {
+        await api.put(`/empresas/${id}`, form);
+      } else {
+        const { data } = await api.post('/empresas', form);
+        empresaId = data.id;
+      }
+      if (sindical.sindicato) {
+        await api.put(`/sindical/${empresaId}`, sindical);
+      }
       navigate('/empresas');
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao salvar empresa');
@@ -73,79 +95,6 @@ export default function EmpresaForm() {
       </div>
 
       <form onSubmit={salvar} className="max-w-2xl space-y-4">
-        <div className="card">
-          <div className="card-header"><span className="card-title">Dados principais</span></div>
-          <div className="p-5 grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="label">Razão Social</label>
-              <input className="input" required value={form.razaoSocial} onChange={e => set('razaoSocial',e.target.value)} placeholder="Nome completo da empresa" />
-            </div>
-            <div>
-              <label className="label">CNPJ</label>
-              <input className="input" required value={form.cnpj} onChange={e => set('cnpj',e.target.value)} placeholder="00.000.000/0001-00" />
-            </div>
-            <div>
-              <label className="label">Enquadramento tributário</label>
-              <select className="select" value={form.enquadramento} onChange={e => set('enquadramento',e.target.value)}>
-                {ENQUADRAMENTOS.map(o => <option key={o} value={o}>{o.replace(/_/g,' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Tipo da empresa</label>
-              <select className="select" value={form.tipo} onChange={e => set('tipo',e.target.value)}>
-                {TIPOS.map(o => <option key={o} value={o}>{o.replace(/_/g,' ')}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Responsável</label>
-              <select className="select" value={form.responsavelId} onChange={e => set('responsavelId',e.target.value)}>
-                <option value="">Selecionar...</option>
-                {responsaveis.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Nível de complexidade</label>
-              <select className="select" value={form.nivel} onChange={e => set('nivel',e.target.value)}>
-                {NIVEIS.map(n => <option key={n} value={n}>{n} — {n==='N1'?'Mais complexo / urgente':n==='N5'?'Menos complexo / sem movimento':'Intermediário'}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className="label">Prazo de entrega (dia do mês)</label>
-              <input className="input" type="number" min="1" max="31" value={form.prazoEntrega} onChange={e => set('prazoEntrega',Number(e.target.value))} placeholder="Ex: 25" />
-            </div>
-          </div>
-        </div>
 
         <div className="card">
-          <div className="card-header"><span className="card-title">Configurações operacionais</span></div>
-          <div className="p-5 grid grid-cols-2 gap-3">
-            <Toggle campo="temFuncionarios" label="Tem funcionários?" />
-            <Toggle campo="temProLabore" label="Tem pró-labore?" />
-            <Toggle campo="semMovimento" label="Empresa sem movimento?" />
-            <Toggle campo="enviaReinf" label="Envia REINF?" />
-            <Toggle campo="fatorR" label="Empresa fator R?" />
-            <Toggle campo="temFilial" label="Possui filial?" />
-          </div>
-        </div>
-
-        <div className="card">
-          <div className="card-header"><span className="card-title">Observações / Particularidades</span></div>
-          <div className="p-5">
-            <textarea className="input h-20 resize-y py-2 leading-relaxed" value={form.observacoes}
-              onChange={e => set('observacoes',e.target.value)}
-              placeholder="Ex: cliente envia ponto atrasado · empresa possui comissão variável..." />
-          </div>
-        </div>
-
-        {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{erro}</div>}
-
-        <div className="flex gap-3">
-          <button type="submit" disabled={salvando} className="btn btn-primary">
-            {salvando ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : isEdicao ? 'Salvar alterações' : 'Cadastrar empresa'}
-          </button>
-          <button type="button" onClick={() => navigate('/empresas')} className="btn btn-secondary">Cancelar</button>
-        </div>
-      </form>
-    </div>
-  );
-}
+          <div className="card-header
