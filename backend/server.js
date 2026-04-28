@@ -16,9 +16,12 @@ const prisma = new PrismaClient();
 
 app.use(cors({
   origin: '*',
-  credentials: true
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  credentials: false
 }));
 
+app.options('*', cors());
 app.use(express.json());
 
 app.get('/health', (req, res) => res.json({ status: 'ok', ts: new Date() }));
