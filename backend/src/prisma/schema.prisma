@@ -75,6 +75,7 @@ model Empresa {
   enviaReinf       Boolean           @default(false)
   observacoes      String?
   ativa            Boolean           @default(true)
+  saiuDoEscritorio Boolean           @default(false)
   criadaEm         DateTime          @default(now())
   responsavelId    String?
   responsavel      Usuario?          @relation("ResponsavelEmpresa", fields: [responsavelId], references: [id])
@@ -96,7 +97,7 @@ model HistoricoMensal {
   id               String       @id @default(cuid())
   empresaId        String
   empresa          Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  competencia      String       // "2026-04" formato YYYY-MM
+  competencia      String
   status           StatusMensal @default(NAO_INICIADO)
   folhaOk          Boolean      @default(false)
   inssOk           Boolean      @default(false)
@@ -120,24 +121,4 @@ model HistoricoMensal {
 
 model HistoricoFilial {
   id            String          @id @default(cuid())
-  filialId      String
-  filial        Filial          @relation(fields: [filialId], references: [id], onDelete: Cascade)
-  historicoId   String
-  historico     HistoricoMensal @relation(fields: [historicoId], references: [id], onDelete: Cascade)
-  valorInss     Decimal?        @db.Decimal(12,2)
-  valorFgts     Decimal?        @db.Decimal(12,2)
-  valorIr       Decimal?        @db.Decimal(12,2)
-
-  @@unique([filialId, historicoId])
-}
-
-model ControleSindical {
-  id              String   @id @default(cuid())
-  empresaId       String   @unique
-  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  sindicato       String
-  dataBase        String   // "01/03" dia/mês
-  ultimaCct       Int      // ano ex: 2026
-  reajusteAplicado Boolean @default(false)
-  atualizadoEm   DateTime @updatedAt
-}
+  filialId
