@@ -54,7 +54,7 @@ model Usuario {
   senha      String
   nivel      NivelAcesso @default(OPERADOR)
   ativo      Boolean     @default(true)
-  criadoEm  DateTime    @default(now())
+  criadoEm   DateTime    @default(now())
   empresas   Empresa[]   @relation("ResponsavelEmpresa")
   historicos HistoricoMensal[]
 }
@@ -76,7 +76,7 @@ model Empresa {
   observacoes      String?
   ativa            Boolean           @default(true)
   saiuDoEscritorio Boolean           @default(false)
-  criadaEm        DateTime          @default(now())
+  criadaEm         DateTime          @default(now())
   responsavelId    String?
   responsavel      Usuario?          @relation("ResponsavelEmpresa", fields: [responsavelId], references: [id])
   filiais          Filial[]
@@ -115,8 +115,8 @@ model HistoricoMensal {
   responsavel      Usuario?     @relation(fields: [responsavelId], references: [id])
   filiais          HistoricoFilial[]
   tarefasOk        TarefaExtraOk[]
-  criadoEm        DateTime     @default(now())
-  atualizadoEm    DateTime     @updatedAt
+  criadoEm         DateTime     @default(now())
+  atualizadoEm     DateTime     @updatedAt
 
   @@unique([empresaId, competencia])
 }
@@ -142,17 +142,22 @@ model ControleSindical {
   dataBase         String
   ultimaCct        Int
   reajusteAplicado Boolean  @default(false)
-  atualizadoEm    DateTime @updatedAt
+  atualizadoEm     DateTime @updatedAt
 }
 
 model TarefaExtra {
-  id        String   @id @default(cuid())
-  empresaId String
-  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  nome      String
-  ativa     Boolean  @default(true)
-  criadoEm DateTime @default(now())
-  registros TarefaExtraOk[]
+  id               String    @id @default(cuid())
+  empresaId        String?
+  empresa          Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nome             String
+  ativa            Boolean   @default(true)
+  global           Boolean   @default(false)
+  paraTodas        Boolean   @default(false)
+  paraFuncionarios Boolean   @default(false)
+  paraProLabore    Boolean   @default(false)
+  paraSemMovimento Boolean   @default(false)
+  criadoEm         DateTime  @default(now())
+  registros        TarefaExtraOk[]
 }
 
 model TarefaExtraOk {
