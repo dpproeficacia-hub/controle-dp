@@ -1,0 +1,143 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum NivelAcesso {
+  OPERADOR
+  GESTOR
+  ADMIN
+}
+
+enum Enquadramento {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+}
+
+enum TipoEmpresa {
+  COMERCIO
+  INDUSTRIA
+  SERVICOS
+  ADVOCACIA
+  CLINICA
+  HOLDING
+  CONSTRUCAO_CIVIL
+  RURAL
+  DOMESTICO
+  TRANSPORTES
+  OUTROS
+}
+
+enum NivelComplexidade {
+  N1
+  N2
+  N3
+  N4
+  N5
+}
+
+enum StatusMensal {
+  NAO_INICIADO
+  PARCIAL
+  FINALIZADO
+}
+
+model Usuario {
+  id         String      @id @default(cuid())
+  nome       String
+  email      String      @unique
+  senha      String
+  nivel      NivelAcesso @default(OPERADOR)
+  ativo      Boolean     @default(true)
+  criadoEm   DateTime    @default(now())
+  empresas   Empresa[]   @relation("ResponsavelEmpresa")
+  historicos HistoricoMensal[]
+}
+
+model Empresa {
+  id               String            @id @default(cuid())
+  razaoSocial      String
+  cnpj             String            @unique
+  enquadramento    Enquadramento
+  tipo             TipoEmpresa
+  nivel            NivelComplexidade @default(N3)
+  prazoEntrega     Int?
+  temFuncionarios  Boolean           @default(false)
+  temProLabore     Boolean           @default(false)
+  semMovimento     Boolean           @default(false)
+  temFilial        Boolean           @default(false)
+  fatorR           Boolean           @default(false)
+  enviaReinf       Boolean           @default(false)
+  observacoes      String?
+  ativa            Boolean           @default(true)
+  criadaEm         DateTime          @default(now())
+  responsavelId    String?
+  responsavel      Usuario?          @relation("ResponsavelEmpresa", fields: [responsavelId], references: [id])
+  filiais          Filial[]
+  historicos       HistoricoMensal[]
+  sindical         ControleSindical?
+}
+
+model Filial {
+  id         String  @id @default(cuid())
+  nome       String
+  cnpj       String?
+  empresaId  String
+  empresa    Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  historicos HistoricoFilial[]
+}
+
+model HistoricoMensal {
+  id               String       @id @default(cuid())
+  empresaId        String
+  empresa          Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  competencia      String       // "2026-04" formato YYYY-MM
+  status           StatusMensal @default(NAO_INICIADO)
+  folhaOk          Boolean      @default(false)
+  inssOk           Boolean      @default(false)
+  fgtsOk           Boolean      @default(false)
+  irOk             Boolean      @default(false)
+  proLaboreOk      Boolean      @default(false)
+  semMovimentoOk   Boolean      @default(false)
+  valorInss        Decimal?     @db.Decimal(12,2)
+  valorFgts        Decimal?     @db.Decimal(12,2)
+  valorIr          Decimal?     @db.Decimal(12,2)
+  dataEntregaFolha DateTime?
+  dataEntregaObrig DateTime?
+  responsavelId    String?
+  responsavel      Usuario?     @relation(fields: [responsavelId], references: [id])
+  filiais          HistoricoFilial[]
+  criadoEm         DateTime     @default(now())
+  atualizadoEm     DateTime     @updatedAt
+
+  @@unique([empresaId, competencia])
+}
+
+model HistoricoFilial {
+  id            String          @id @default(cuid())
+  filialId      String
+  filial        Filial          @relation(fields: [filialId], references: [id], onDelete: Cascade)
+  historicoId   String
+  historico     HistoricoMensal @relation(fields: [historicoId], references: [id], onDelete: Cascade)
+  valorInss     Decimal?        @db.Decimal(12,2)
+  valorFgts     Decimal?        @db.Decimal(12,2)
+  valorIr       Decimal?        @db.Decimal(12,2)
+
+  @@unique([filialId, historicoId])
+}
+
+model ControleSindical {
+  id              String   @id @default(cuid())
+  empresaId       String   @unique
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sindicato       String
+  dataBase        String   // "01/03" dia/mês
+  ultimaCct       Int      // ano ex: 2026
+  reajusteAplicado Boolean @default(false)
+  atualizadoEm   DateTime @updatedAt
+}

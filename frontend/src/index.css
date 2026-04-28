@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  body {
+    @apply bg-bg text-ink font-sans;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { @apply bg-border2 rounded; }
+}
+
+@layer components {
+  .card {
+    @apply bg-surface rounded-xl border border-border overflow-hidden;
+  }
+  .card-header {
+    @apply px-5 py-3.5 border-b border-border flex items-center justify-between;
+  }
+  .card-title {
+    @apply text-sm font-semibold text-ink;
+  }
+  .btn {
+    @apply inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer border-0 font-sans;
+  }
+  .btn-primary {
+    @apply bg-ink text-bg hover:bg-zinc-800 active:scale-95;
+  }
+  .btn-secondary {
+    @apply bg-surface2 text-ink border border-border hover:bg-border;
+  }
+  .btn-danger {
+    @apply bg-red-50 text-red-700 border border-red-200 hover:bg-red-100;
+  }
+  .pill {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold;
+  }
+  .pill-green  { @apply bg-green-50  text-green-800; }
+  .pill-amber  { @apply bg-amber-50  text-amber-800; }
+  .pill-red    { @apply bg-red-50    text-red-700; }
+  .pill-blue   { @apply bg-blue-50   text-blue-800; }
+  .pill-gray   { @apply bg-surface2  text-muted border border-border; }
+  .pill-teal   { @apply bg-teal-50   text-teal-800; }
+  .pill-purple { @apply bg-purple-50 text-purple-800; }
+  .input {
+    @apply w-full h-9 border border-border rounded-lg px-3 text-sm bg-surface text-ink outline-none focus:border-blue-300 transition-colors font-sans;
+  }
+  .select {
+    @apply w-full h-9 border border-border rounded-lg px-3 text-sm bg-surface text-ink outline-none focus:border-blue-300 transition-colors font-sans;
+  }
+  .label {
+    @apply block text-xs font-semibold uppercase tracking-wide text-faint mb-1.5;
+  }
+  .nav-item {
+    @apply flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer text-muted text-sm font-medium transition-all select-none;
+  }
+  .nav-item:hover { @apply bg-surface2 text-ink; }
+  .nav-item.active { @apply bg-ink text-bg; }
+  .check-item {
+    @apply flex items-center gap-3.5 px-5 py-3.5 border-b border-border cursor-pointer transition-colors hover:bg-surface2 last:border-b-0;
+  }
+  .check-item.done .check-label { @apply text-faint line-through; }
+  .check-box {
+    @apply w-5 h-5 rounded-md border-2 border-border2 flex-shrink-0 flex items-center justify-center transition-all;
+  }
+  .check-box.done { @apply bg-ink border-ink; }
+  .progress-bar {
+    @apply h-1.5 bg-surface2 rounded-full overflow-hidden border border-border;
+  }
+  .progress-fill {
+    @apply h-full rounded-full transition-all duration-500;
+  }
+}
