@@ -5,19 +5,32 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [usuario, setUsuario] = useState(() => {
-    const s = localStorage.getItem('dp_usuario');
-    return s ? JSON.parse(s) : null;
+    try {
+      const s = localStorage.getItem('dp_usuario');
+      return s && s !== 'undefined' ? JSON.parse(s) : null;
+    } catch {
+      return null;
+    }
   });
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
     const token = localStorage.getItem('dp_token');
-    if (token) {
+    if (token && token !== 'undefined') {
       api.get('/auth/me')
-        .then(r => { setUsuario(r.data); localStorage.setItem('dp_usuario', JSON.stringify(r.data)); })
-        .catch(() => { localStorage.clear(); setUsuario(null); })
+        .then(r => {
+          setUsuario(r.data);
+          localStorage.setItem('dp_usuario', JSON.stringify(r.data));
+        })
+        .catch(() => {
+          localStorage.removeItem('dp_token');
+          localStorage.removeItem('dp_usuario');
+          setUsuario(null);
+        })
         .finally(() => setCarregando(false));
     } else {
+      localStorage.removeItem('dp_token');
+      localStorage.removeItem('dp_usuario');
       setCarregando(false);
     }
   }, []);
