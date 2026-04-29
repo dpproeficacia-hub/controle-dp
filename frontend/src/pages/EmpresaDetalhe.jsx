@@ -278,3 +278,75 @@ export default function EmpresaDetalhe() {
             <div className="card p-4">
               <p className="label mb-2">Observações</p>
               <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 leading-relaxed">
+                {empresa.observacoes}
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-4">
+          <div className="card p-4 text-center">
+            <p className="font-display font-bold text-4xl" style={{color: pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D'}}>{pct}%</p>
+            <p className="text-xs text-faint mt-1">
+              {pct===100?'Finalizado':pct>0?'Em andamento':'Não iniciado'}
+            </p>
+            <div className="progress-bar mt-3">
+              <div className="progress-fill" style={{ width:`${pct}%`, background: pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D' }} />
+            </div>
+            {pct < 100 && (
+              <p className="text-xs text-faint mt-2">
+                {feitos}/{total} tarefas concluídas
+              </p>
+            )}
+          </div>
+
+          <div className="card">
+            <div className="card-header"><span className="card-title">Resumo Financeiro</span></div>
+            <div className="p-4 space-y-2.5">
+              {[['INSS','valorInss'],['FGTS','valorFgts'],['IR','valorIr']].map(([l,k]) => (
+                <div key={k} className="flex justify-between text-sm">
+                  <span className="text-muted">{l}</span>
+                  <span className="font-semibold">{historico[k] ? fmtMoeda(historico[k]) : '—'}</span>
+                </div>
+              ))}
+              <div className="border-t border-border pt-2.5 flex justify-between text-sm">
+                <span className="font-semibold">Total</span>
+                <span className="font-bold text-green-700">{totalFinanceiro > 0 ? fmtMoeda(totalFinanceiro) : '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          {empresa.sindical && (
+            <div className="card">
+              <div className="card-header"><span className="card-title">Controle Sindical</span></div>
+              <div className="p-4 space-y-2">
+                {[
+                  ['Sindicato', empresa.sindical.sindicato],
+                  ['Data-base', empresa.sindical.dataBase],
+                  ['Última CCT', empresa.sindical.ultimaCct],
+                ].map(([l,v]) => (
+                  <div key={l} className="flex justify-between text-xs">
+                    <span className="text-faint">{l}</span>
+                    <span className="font-medium text-right max-w-[160px]">{v}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-xs">
+                  <span className="text-faint">Status CCT</span>
+                  <span className={`pill text-[10px] ${empresa.sindical.ultimaCct >= new Date().getFullYear() ? 'pill-green' : 'pill-red'}`}>
+                    {empresa.sindical.ultimaCct >= new Date().getFullYear() ? 'Atualizada' : 'Desatualizada'}
+                  </span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-faint">Reajuste</span>
+                  <span className={`pill text-[10px] ${empresa.sindical.reajusteAplicado ? 'pill-green' : 'pill-red'}`}>
+                    {empresa.sindical.reajusteAplicado ? 'Aplicado' : 'Pendente'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
