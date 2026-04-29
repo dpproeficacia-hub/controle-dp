@@ -1,7 +1,7 @@
 {
   "name": "dpsmart-backend",
   "version": "1.0.0",
-  "description": "API DPSmart — Departamento Pessoal",
+  "description": "API DPSmart",
   "main": "server.js",
   "scripts": {
     "dev": "nodemon server.js",
