@@ -7,11 +7,11 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'logo192.png'],
+      includeAssets: ['favicon.ico'],
       manifest: {
         name: 'DPSmart — Departamento Pessoal',
         short_name: 'DPSmart',
-        description: 'Sistema de gestão de Departamento Pessoal para escritórios contábeis',
+        description: 'Sistema de gestão de Departamento Pessoal',
         theme_color: '#1C1B19',
         background_color: '#F4F3EF',
         display: 'standalone',
@@ -21,18 +21,17 @@ export default defineConfig({
           { src: 'logo192.png', sizes: '192x192', type: 'image/png' },
           { src: 'logo512.png', sizes: '512x512', type: 'image/png' }
         ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/.*\/api\/.*/i,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'api-cache', expiration: { maxEntries: 50, maxAgeSeconds: 300 } }
-          }
-        ]
       }
     })
   ],
-  server: { port: 5173 }
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': {
+        target: 'https://controle-dp-backend.onrender.com',
+        changeOrigin: true,
+        secure: true
+      }
+    }
+  }
 });
