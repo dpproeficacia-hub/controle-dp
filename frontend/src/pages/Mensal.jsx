@@ -10,7 +10,8 @@ export default function Mensal() {
   const { competencia } = useOutletContext();
   const [empresas, setEmpresas] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState('TODAS');
+  const [filtroTipo, setFiltroTipo] = useState('TODAS');
+  const [filtroStatus, setFiltroStatus] = useState('TODOS');
   const [busca, setBusca] = useState('');
   const navigate = useNavigate();
 
@@ -23,9 +24,14 @@ export default function Mensal() {
   }, [competencia]);
 
   const filtradas = empresas.filter(e => {
-    const matchFiltro = filtro === 'TODAS' || e.historico?.status === filtro;
+    const matchTipo =
+      filtroTipo === 'TODAS' ||
+      (filtroTipo === 'FUNCIONARIOS' && e.temFuncionarios) ||
+      (filtroTipo === 'PROLABORE' && e.temProLabore && !e.temFuncionarios) ||
+      (filtroTipo === 'SEM_MOVIMENTO' && e.semMovimento && !e.temFuncionarios && !e.temProLabore);
+    const matchStatus = filtroStatus === 'TODOS' || e.historico?.status === filtroStatus;
     const matchBusca = !busca || e.razaoSocial.toLowerCase().includes(busca.toLowerCase()) || e.cnpj.includes(busca);
-    return matchFiltro && matchBusca;
+    return matchTipo && matchStatus && matchBusca;
   });
 
   function calcPct(e) {
@@ -40,22 +46,47 @@ export default function Mensal() {
     return total ? Math.round((feitos/total)*100) : 0;
   }
 
+  const tiposFiltro = [
+    { key: 'TODAS', label: 'Todas' },
+    { key: 'FUNCIONARIOS', label: 'Com funcionários' },
+    { key: 'PROLABORE', label: 'Pró-labore' },
+    { key: 'SEM_MOVIMENTO', label: 'Sem movimento' },
+  ];
+
+  const statusFiltro = [
+    { key: 'TODOS', label: 'Todos os status' },
+    { key: 'NAO_INICIADO', label: 'Não iniciado' },
+    { key: 'PARCIAL', label: 'Em andamento' },
+    { key: 'FINALIZADO', label: 'Finalizado' },
+  ];
+
   return (
     <div>
+      {/* Filtros de tipo */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
+        {tiposFiltro.map(f => (
+          <button key={f.key} onClick={() => setFiltroTipo(f.key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${filtroTipo === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filtros de status */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
+        {statusFiltro.map(f => (
+          <button key={f.key} onClick={() => setFiltroStatus(f.key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${filtroStatus === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+            {f.label}
+          </button>
+        ))}
         <input
-          className="input max-w-xs"
+          className="input max-w-xs ml-auto"
           placeholder="Buscar empresa ou CNPJ..."
           value={busca}
           onChange={e => setBusca(e.target.value)}
         />
-        {['TODAS','NAO_INICIADO','PARCIAL','FINALIZADO'].map(f => (
-          <button key={f} onClick={() => setFiltro(f)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all border ${filtro === f ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
-            {f === 'TODAS' ? 'Todas' : STATUS_LABEL[f]}
-          </button>
-        ))}
-        <span className="ml-auto text-xs text-faint">{filtradas.length} empresa(s)</span>
+        <span className="text-xs text-faint">{filtradas.length} empresa(s)</span>
       </div>
 
       {loading ? (
