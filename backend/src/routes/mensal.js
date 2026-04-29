@@ -20,16 +20,29 @@ function calcularStatus(h, empresa) {
   return 'PARCIAL';
 }
 
-// Campos permitidos no HistoricoMensal
 const CAMPOS_HISTORICO = [
   'folhaOk','inssOk','fgtsOk','irOk','proLaboreOk','semMovimentoOk',
   'valorInss','valorFgts','valorIr','dataEntregaFolha','dataEntregaObrig','tarefasOk'
 ];
 
 function filtrarCampos(dados) {
-  return Object.fromEntries(
-    Object.entries(dados).filter(([k]) => CAMPOS_HISTORICO.includes(k))
-  );
+  const resultado = {};
+  for (const [k, v] of Object.entries(dados)) {
+    if (!CAMPOS_HISTORICO.includes(k)) continue;
+    // Converte strings de data "YYYY-MM-DD" para DateTime ISO completo
+    if ((k === 'dataEntregaFolha' || k === 'dataEntregaObrig')) {
+      if (!v || v === '') {
+        resultado[k] = null;
+      } else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
+        resultado[k] = new Date(v + 'T00:00:00.000Z');
+      } else {
+        resultado[k] = new Date(v);
+      }
+    } else {
+      resultado[k] = v;
+    }
+  }
+  return resultado;
 }
 
 // Listar controle mensal por competência
@@ -114,7 +127,6 @@ router.post('/:competencia/:empresaId', async (req, res) => {
     const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-    // Remove campos desconhecidos que o frontend envia (tarefasExtrasOk, id, filiais, etc.)
     const { filiaisData, ...resto } = dados;
     const dadosPrincipais = filtrarCampos(resto);
 
