@@ -1,6 +1,5 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const { PrismaClient } = require('@prisma/client');
@@ -16,36 +15,18 @@ const tarefasRoutes = require('./src/routes/tarefas');
 const app = express();
 const prisma = new PrismaClient();
 
-// ─── CORS ─────────────────────────────────────────────────────────────────────
-const allowedOrigins = [
-  'https://controle-dp-frontend.onrender.com',
-  'http://localhost:5173',
-  'http://localhost:3000',
-];
-
-const corsOptions = {
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials: true,
-  optionsSuccessStatus: 200,
-};
-
-app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') { res.sendStatus(200); return; }
+  next();
+});
 
 app.use(express.json());
 
-// ─── Health ───────────────────────────────────────────────────────────────────
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
-// ─── Setup ────────────────────────────────────────────────────────────────────
 app.get('/setup', async (req, res) => {
   try {
     const existe = await prisma.usuario.findUnique({ where: { email: 'admin@dpsmart.com' } });
@@ -58,7 +39,6 @@ app.get('/setup', async (req, res) => {
   }
 });
 
-// ─── Rotas ────────────────────────────────────────────────────────────────────
 app.use('/api/auth', authRoutes);
 app.use('/api/empresas', empresasRoutes);
 app.use('/api/mensal', mensalRoutes);
@@ -67,14 +47,9 @@ app.use('/api/responsaveis', responsaveisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/tarefas', tarefasRoutes);
 
-// ─── Error handler (mantém CORS mesmo em 500) ─────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  const origin = req.headers.origin;
-  if (origin && allowedOrigins.includes(origin)) {
-    res.setHeader('Access-Control-Allow-Origin', origin);
-    res.setHeader('Access-Control-Allow-Credentials', 'true');
-  }
+  res.setHeader('Access-Control-Allow-Origin', '*');
   res.status(500).json({ error: 'Erro interno' });
 });
 
