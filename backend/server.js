@@ -1,5 +1,6 @@
 require('dotenv').config();
 const express = require('express');
+const cors = require('cors');
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 
@@ -14,6 +15,16 @@ const tarefasRoutes = require('./src/routes/tarefas');
 const app = express();
 const prisma = new PrismaClient();
 
+const corsOptions = {
+  origin: '*',
+  methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'],
+  allowedHeaders: ['Content-Type','Authorization'],
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
+
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
@@ -24,7 +35,10 @@ app.use((req, res, next) => {
 
 app.use(express.json());
 
-app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/health', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.json({ status: 'ok', cors: 'enabled' });
+});
 
 app.get('/setup', async (req, res) => {
   try {
