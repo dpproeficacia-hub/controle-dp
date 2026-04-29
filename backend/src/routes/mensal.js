@@ -22,15 +22,14 @@ function calcularStatus(h, empresa) {
 
 const CAMPOS_HISTORICO = [
   'folhaOk','inssOk','fgtsOk','irOk','proLaboreOk','semMovimentoOk',
-  'valorInss','valorFgts','valorIr','dataEntregaFolha','dataEntregaObrig','tarefasOk'
+  'valorInss','valorFgts','valorIr','dataEntregaFolha','dataEntregaObrig'
 ];
 
 function filtrarCampos(dados) {
   const resultado = {};
   for (const [k, v] of Object.entries(dados)) {
     if (!CAMPOS_HISTORICO.includes(k)) continue;
-    // Converte strings de data "YYYY-MM-DD" para DateTime ISO completo
-    if ((k === 'dataEntregaFolha' || k === 'dataEntregaObrig')) {
+    if (k === 'dataEntregaFolha' || k === 'dataEntregaObrig') {
       if (!v || v === '') {
         resultado[k] = null;
       } else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) {
@@ -97,7 +96,7 @@ router.get('/:competencia/:empresaId', async (req, res) => {
 
     const historico = await prisma.historicoMensal.findUnique({
       where: { empresaId_competencia: { empresaId, competencia } },
-      include: { filiais: { include: { filial: true } } }
+      include: { filiais: { include: { filial: true } }, tarefasOk: true }
     });
 
     if (!historico) {
@@ -107,7 +106,7 @@ router.get('/:competencia/:empresaId', async (req, res) => {
         proLaboreOk: false, semMovimentoOk: false,
         valorInss: null, valorFgts: null, valorIr: null,
         dataEntregaFolha: null, dataEntregaObrig: null,
-        filiais: []
+        filiais: [], tarefasOk: []
       });
     }
 
@@ -127,7 +126,8 @@ router.post('/:competencia/:empresaId', async (req, res) => {
     const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-    const { filiaisData, ...resto } = dados;
+    // Remove tarefasOk, filiaisData e qualquer campo não permitido
+    const { filiaisData, tarefasOk, tarefasExtrasOk, ...resto } = dados;
     const dadosPrincipais = filtrarCampos(resto);
 
     const statusCalculado = calcularStatus(dadosPrincipais, empresa);
@@ -145,8 +145,19 @@ router.post('/:competencia/:empresaId', async (req, res) => {
         status: statusCalculado,
         responsavelId: req.user.id,
       },
-      include: { filiais: true }
+      include: { filiais: true, tarefasOk: true }
     });
+
+    // Salvar tarefasExtrasOk se houver
+    if (tarefasExtrasOk?.length) {
+      for (const t of tarefasExtrasOk) {
+        await prisma.tarefaExtraOk.upsert({
+          where: { tarefaId_historicoId: { tarefaId: t.tarefaId, historicoId: historico.id } },
+          create: { tarefaId: t.tarefaId, historicoId: historico.id, ok: t.ok },
+          update: { ok: t.ok }
+        });
+      }
+    }
 
     if (filiaisData?.length) {
       for (const filial of filiaisData) {
@@ -170,7 +181,7 @@ router.get('/historico/:empresaId', async (req, res) => {
   try {
     const historicos = await prisma.historicoMensal.findMany({
       where: { empresaId: req.params.empresaId },
-      include: { filiais: { include: { filial: true } }, responsavel: { select: { nome: true } } },
+      include: { filiais: { include: { filial: true } }, responsavel: { select: { nome: true } }, tarefasOk: true },
       orderBy: { competencia: 'desc' }
     });
     res.json(historicos);
