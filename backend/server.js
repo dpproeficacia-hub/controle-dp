@@ -1,9 +1,8 @@
 require('dotenv').config();
 const express = require('express');
-const cors = require('cors');
 const bcrypt = require('bcryptjs');
+const path = require('path');
 const { PrismaClient } = require('@prisma/client');
-const { corsMiddleware } = require('./src/middleware/auth');
 
 const authRoutes = require('./src/routes/auth');
 const empresasRoutes = require('./src/routes/empresas');
@@ -16,12 +15,17 @@ const tarefasRoutes = require('./src/routes/tarefas');
 const app = express();
 const prisma = new PrismaClient();
 
-app.use(cors({ origin: '*', methods: ['GET','POST','PUT','PATCH','DELETE','OPTIONS'], allowedHeaders: ['Content-Type','Authorization'], optionsSuccessStatus: 200 }));
-app.options('*', (req, res) => { res.header('Access-Control-Allow-Origin','*'); res.header('Access-Control-Allow-Methods','GET,POST,PUT,PATCH,DELETE,OPTIONS'); res.header('Access-Control-Allow-Headers','Content-Type,Authorization'); res.sendStatus(200); });
-app.use(corsMiddleware);
+app.use((req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+  if (req.method === 'OPTIONS') { res.sendStatus(200); return; }
+  next();
+});
+
 app.use(express.json());
 
-app.get('/health', (req, res) => res.json({ status: 'ok', cors: 'enabled' }));
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
 app.get('/setup', async (req, res) => {
   try {
@@ -35,15 +39,18 @@ app.get('/setup', async (req, res) => {
   }
 });
 
-app.use('/api/auth', corsMiddleware, authRoutes);
-app.use('/api/empresas', corsMiddleware, empresasRoutes);
-app.use('/api/mensal', corsMiddleware, mensalRoutes);
-app.use('/api/sindical', corsMiddleware, sindicalRoutes);
-app.use('/api/responsaveis', corsMiddleware, responsaveisRoutes);
-app.use('/api/dashboard', corsMiddleware, dashboardRoutes);
-app.use('/api/tarefas', corsMiddleware, tarefasRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/empresas', empresasRoutes);
+app.use('/api/mensal', mensalRoutes);
+app.use('/api/sindical', sindicalRoutes);
+app.use('/api/responsaveis', responsaveisRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/tarefas', tarefasRoutes);
 
-app.use((err, req, res, next) => { console.error(err.stack); res.status(500).json({ error: 'Erro interno' }); });
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Erro interno' });
+});
 
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`API rodando na porta ${PORT}`));
