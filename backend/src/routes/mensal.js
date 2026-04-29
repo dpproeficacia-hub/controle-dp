@@ -7,7 +7,6 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-// Calcula status automaticamente
 function calcularStatus(h, empresa) {
   const campos = [];
   if (empresa.temFuncionarios) campos.push('folhaOk', 'inssOk', 'fgtsOk', 'irOk');
@@ -15,6 +14,7 @@ function calcularStatus(h, empresa) {
   else if (empresa.semMovimento) campos.push('semMovimentoOk');
 
   const total = campos.length;
+  if (total === 0) return 'NAO_INICIADO';
   const feitos = campos.filter(c => h[c]).length;
 
   if (feitos === 0) return 'NAO_INICIADO';
@@ -24,118 +24,136 @@ function calcularStatus(h, empresa) {
 
 // Listar controle mensal por competência
 router.get('/:competencia', async (req, res) => {
-  const { competencia } = req.params; // ex: "2026-04"
-  const { status, responsavelId } = req.query;
+  try {
+    const { competencia } = req.params;
+    const { status, responsavelId } = req.query;
 
-  const whereEmpresa = { ativa: true };
-  if (req.user.nivel === 'OPERADOR') whereEmpresa.responsavelId = req.user.id;
-  else if (responsavelId) whereEmpresa.responsavelId = responsavelId;
+    const whereEmpresa = { ativa: true };
+    if (req.user.nivel === 'OPERADOR') whereEmpresa.responsavelId = req.user.id;
+    else if (responsavelId) whereEmpresa.responsavelId = responsavelId;
 
-  const empresas = await prisma.empresa.findMany({
-    where: whereEmpresa,
-    include: {
-      responsavel: { select: { id: true, nome: true } },
-      historicos: { where: { competencia } },
-      filiais: true,
-    },
-    orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
-  });
+    const empresas = await prisma.empresa.findMany({
+      where: whereEmpresa,
+      include: {
+        responsavel: { select: { id: true, nome: true } },
+        historicos: { where: { competencia } },
+        filiais: true,
+      },
+      orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
+    });
 
-  const resultado = empresas.map(emp => {
-    let historico = emp.historicos[0];
+    const resultado = empresas.map(emp => {
+      let historico = emp.historicos[0];
+      if (!historico) {
+        historico = {
+          id: null, competencia, status: 'NAO_INICIADO',
+          folhaOk: false, inssOk: false, fgtsOk: false, irOk: false,
+          proLaboreOk: false, semMovimentoOk: false,
+          valorInss: null, valorFgts: null, valorIr: null,
+          dataEntregaFolha: null, dataEntregaObrig: null,
+        };
+      }
+      return { ...emp, historicos: undefined, historico };
+    });
+
+    const filtrado = status
+      ? resultado.filter(e => e.historico.status === status)
+      : resultado;
+
+    res.json(filtrado);
+  } catch (e) {
+    console.error('GET /:competencia erro:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Buscar histórico de uma empresa para uma competência
+router.get('/:competencia/:empresaId', async (req, res) => {
+  try {
+    const { competencia, empresaId } = req.params;
+
+    const historico = await prisma.historicoMensal.findUnique({
+      where: { empresaId_competencia: { empresaId, competencia } },
+      include: { filiais: { include: { filial: true } } }
+    });
+
     if (!historico) {
-      // retorna estrutura vazia (não iniciado)
-      historico = {
-        id: null, competencia, status: 'NAO_INICIADO',
+      return res.json({
+        id: null, empresaId, competencia, status: 'NAO_INICIADO',
         folhaOk: false, inssOk: false, fgtsOk: false, irOk: false,
         proLaboreOk: false, semMovimentoOk: false,
         valorInss: null, valorFgts: null, valorIr: null,
         dataEntregaFolha: null, dataEntregaObrig: null,
-      };
+        filiais: []
+      });
     }
-    return { ...emp, historicos: undefined, historico };
-  });
 
-  const filtrado = status
-    ? resultado.filter(e => e.historico.status === status)
-    : resultado;
-
-  res.json(filtrado);
-});
-
-// Buscar/criar histórico de uma empresa para uma competência
-router.get('/:competencia/:empresaId', async (req, res) => {
-  const { competencia, empresaId } = req.params;
-
-  let historico = await prisma.historicoMensal.findUnique({
-    where: { empresaId_competencia: { empresaId, competencia } },
-    include: { filiais: { include: { filial: true } } }
-  });
-
-  if (!historico) {
-    return res.json({
-      id: null, empresaId, competencia, status: 'NAO_INICIADO',
-      folhaOk: false, inssOk: false, fgtsOk: false, irOk: false,
-      proLaboreOk: false, semMovimentoOk: false,
-      valorInss: null, valorFgts: null, valorIr: null,
-      dataEntregaFolha: null, dataEntregaObrig: null,
-      filiais: []
-    });
+    res.json(historico);
+  } catch (e) {
+    console.error('GET /:competencia/:empresaId erro:', e);
+    res.status(500).json({ error: e.message });
   }
-
-  res.json(historico);
 });
 
 // Salvar/atualizar histórico mensal
 router.post('/:competencia/:empresaId', async (req, res) => {
-  const { competencia, empresaId } = req.params;
-  const dados = req.body;
+  try {
+    const { competencia, empresaId } = req.params;
+    const dados = req.body;
 
-  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
-  if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
+    const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
+    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
-  const { filiaisData, ...dadosPrincipais } = dados;
+    const { filiaisData, ...dadosPrincipais } = dados;
 
-  const statusCalculado = calcularStatus(dadosPrincipais, empresa);
+    const statusCalculado = calcularStatus(dadosPrincipais, empresa);
 
-  const historico = await prisma.historicoMensal.upsert({
-    where: { empresaId_competencia: { empresaId, competencia } },
-    create: {
-      empresaId, competencia,
-      ...dadosPrincipais,
-      status: statusCalculado,
-      responsavelId: req.user.id,
-    },
-    update: {
-      ...dadosPrincipais,
-      status: statusCalculado,
-      responsavelId: req.user.id,
-    },
-    include: { filiais: true }
-  });
+    const historico = await prisma.historicoMensal.upsert({
+      where: { empresaId_competencia: { empresaId, competencia } },
+      create: {
+        empresaId, competencia,
+        ...dadosPrincipais,
+        status: statusCalculado,
+        responsavelId: req.user.id,
+      },
+      update: {
+        ...dadosPrincipais,
+        status: statusCalculado,
+        responsavelId: req.user.id,
+      },
+      include: { filiais: true }
+    });
 
-  // Atualizar filiais se houver
-  if (filiaisData?.length) {
-    for (const filial of filiaisData) {
-      await prisma.historicoFilial.upsert({
-        where: { filialId_historicoId: { filialId: filial.filialId, historicoId: historico.id } },
-        create: { filialId: filial.filialId, historicoId: historico.id, ...filial.valores },
-        update: { ...filial.valores }
-      });
+    if (filiaisData?.length) {
+      for (const filial of filiaisData) {
+        await prisma.historicoFilial.upsert({
+          where: { filialId_historicoId: { filialId: filial.filialId, historicoId: historico.id } },
+          create: { filialId: filial.filialId, historicoId: historico.id, ...filial.valores },
+          update: { ...filial.valores }
+        });
+      }
     }
-  }
 
-  res.json(historico);
+    res.json(historico);
+  } catch (e) {
+    console.error('POST /:competencia/:empresaId erro:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Histórico completo de uma empresa (todos os meses)
 router.get('/historico/:empresaId', async (req, res) => {
-  const historicos = await prisma.historicoMensal.findMany({
-    where: { empresaId: req.params.empresaId },
-    include: { filiais: { include: { filial: true } }, responsavel: { select: { nome: true } } },
-    orderBy: { competencia: 'desc' }
-  });
-  res.json(historicos);
+  try {
+    const historicos = await prisma.historicoMensal.findMany({
+      where: { empresaId: req.params.empresaId },
+      include: { filiais: { include: { filial: true } }, responsavel: { select: { nome: true } } },
+      orderBy: { competencia: 'desc' }
+    });
+    res.json(historicos);
+  } catch (e) {
+    console.error('GET /historico/:empresaId erro:', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 module.exports = router;
