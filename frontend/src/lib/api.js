@@ -1,9 +1,13 @@
 import axios from 'axios';
 
+const BASE = import.meta.env.VITE_API_URL
+  ? `https://${import.meta.env.VITE_API_URL}/api`
+  : 'http://localhost:3001/api';
+
+console.log('API URL:', BASE);
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL
-    ? `https://${import.meta.env.VITE_API_URL}/api`
-    : 'http://localhost:3001/api',
+  baseURL: BASE,
   timeout: 15000,
 });
 
