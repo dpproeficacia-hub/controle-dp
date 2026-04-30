@@ -1,7 +1,6 @@
 require('dotenv').config();
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const path = require('path');
 const { PrismaClient } = require('@prisma/client');
 
 const authRoutes = require('./src/routes/auth');
@@ -11,6 +10,7 @@ const sindicalRoutes = require('./src/routes/sindical');
 const responsaveisRoutes = require('./src/routes/responsaveis');
 const dashboardRoutes = require('./src/routes/dashboard');
 const tarefasRoutes = require('./src/routes/tarefas');
+const relatorioRoutes = require('./src/routes/relatorio');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -46,6 +46,7 @@ app.use('/api/sindical', sindicalRoutes);
 app.use('/api/responsaveis', responsaveisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/tarefas', tarefasRoutes);
+app.use('/api/relatorio', relatorioRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
