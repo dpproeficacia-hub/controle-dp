@@ -152,6 +152,7 @@ model TarefaExtra {
   empresaId        String?
   empresa          Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   nome             String
+  prazoEntregaDia  Int?
   ativa            Boolean   @default(true)
   global           Boolean   @default(false)
   paraTodas        Boolean   @default(false)
