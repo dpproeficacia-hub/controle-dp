@@ -11,6 +11,7 @@ import Sindical from './pages/Sindical';
 import Responsaveis from './pages/Responsaveis';
 import Identidade from './pages/Identidade';
 import Relatorio from './pages/Relatorio';
+import Tarefas from './pages/Tarefas';
 
 function Protegido({ children }) {
   const { usuario, carregando } = useAuth();
@@ -43,6 +44,7 @@ export default function App() {
             <Route path="responsaveis" element={<Responsaveis />} />
             <Route path="identidade" element={<Identidade />} />
             <Route path="relatorio" element={<Relatorio />} />
+            <Route path="tarefas" element={<Tarefas />} />
           </Route>
         </Routes>
       </BrowserRouter>
