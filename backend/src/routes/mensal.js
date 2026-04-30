@@ -7,33 +7,63 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-function calcularStatus(h, empresa) {
-  // Se é pró-labore enviado como sem movimento este mês
-  if (empresa.temProLabore && !empresa.temFuncionarios && h.semMovimentoMes) {
-    return h.semMovimentoOk ? 'FINALIZADO' : 'NAO_INICIADO';
-  }
-  const campos = [];
-  if (empresa.temFuncionarios) campos.push('folhaOk', 'inssOk', 'fgtsOk', 'irOk');
-  else if (empresa.temProLabore) campos.push('proLaboreOk', 'inssOk', 'fgtsOk');
-  else if (empresa.semMovimento) campos.push('semMovimentoOk');
-  const total = campos.length;
+// Status calculado 100% pelas tarefas
+async function calcularStatus(historicoId, empresaId) {
+  const empresa = await prisma.empresa.findUnique({
+    where: { id: empresaId },
+    select: { temFuncionarios: true, temProLabore: true, semMovimento: true }
+  });
+
+  // Busca tarefas aplicáveis à empresa
+  const tarefas = await prisma.tarefaExtra.findMany({
+    where: {
+      ativa: true,
+      global: true,
+      OR: [
+        { paraTodas: true },
+        { paraFuncionarios: empresa.temFuncionarios ? true : undefined },
+        { paraProLabore: empresa.temProLabore ? true : undefined },
+        { paraSemMovimento: empresa.semMovimento ? true : undefined },
+      ]
+    }
+  });
+
+  const tarefasFiltradas = tarefas.filter(t => {
+    if (t.paraTodas) return true;
+    if (t.paraFuncionarios && empresa.temFuncionarios) return true;
+    if (t.paraProLabore && empresa.temProLabore) return true;
+    if (t.paraSemMovimento && empresa.semMovimento) return true;
+    return false;
+  });
+
+  // Tarefas específicas da empresa
+  const tarefasEmpresa = await prisma.tarefaExtra.findMany({
+    where: { empresaId, ativa: true, global: false }
+  });
+
+  const todasTarefas = [...tarefasFiltradas, ...tarefasEmpresa];
+  const total = todasTarefas.length;
   if (total === 0) return 'NAO_INICIADO';
-  const feitos = campos.filter(c => h[c]).length;
+
+  // Busca quais estão ok
+  const tarefasOk = await prisma.tarefaExtraOk.findMany({
+    where: { historicoId, ok: true }
+  });
+
+  const feitos = tarefasOk.length;
   if (feitos === 0) return 'NAO_INICIADO';
-  if (feitos === total) return 'FINALIZADO';
+  if (feitos >= total) return 'FINALIZADO';
   return 'PARCIAL';
 }
 
-const CAMPOS_HISTORICO = [
-  'folhaOk','inssOk','fgtsOk','irOk','proLaboreOk','semMovimentoOk','semMovimentoMes',
-  'valorInss','valorFgts','valorIr','dataEntregaFolha','dataEntregaObrig'
-];
-
-function filtrarCampos(dados) {
+function parseDatas(dados) {
   const resultado = {};
+  const camposData = ['dataEntregaFolha', 'dataEntregaObrig'];
+  const camposPermitidos = ['semMovimentoMes', 'dataEntregaFolha', 'dataEntregaObrig', 'valorInss', 'valorFgts', 'valorIr'];
+
   for (const [k, v] of Object.entries(dados)) {
-    if (!CAMPOS_HISTORICO.includes(k)) continue;
-    if (k === 'dataEntregaFolha' || k === 'dataEntregaObrig') {
+    if (!camposPermitidos.includes(k)) continue;
+    if (camposData.includes(k)) {
       if (!v || v === '') resultado[k] = null;
       else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v)) resultado[k] = new Date(v + 'T00:00:00.000Z');
       else resultado[k] = new Date(v);
@@ -44,6 +74,7 @@ function filtrarCampos(dados) {
   return resultado;
 }
 
+// Listar controle mensal por competência
 router.get('/:competencia', async (req, res) => {
   try {
     const { competencia } = req.params;
@@ -56,24 +87,51 @@ router.get('/:competencia', async (req, res) => {
       where: whereEmpresa,
       include: {
         responsavel: { select: { id: true, nome: true } },
-        historicos: { where: { competencia } },
+        historicos: {
+          where: { competencia },
+          include: { tarefasOk: true }
+        },
         filiais: true,
       },
       orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
     });
 
+    // Busca todas as tarefas globais de uma vez
+    const tarefasGlobais = await prisma.tarefaExtra.findMany({
+      where: { ativa: true, global: true }
+    });
+
     const resultado = empresas.map(emp => {
-      let historico = emp.historicos[0];
-      if (!historico) {
-        historico = {
+      const historico = emp.historicos[0] || null;
+      const tarefasOk = historico?.tarefasOk || [];
+
+      // Filtra tarefas aplicáveis
+      const tarefasAplicaveis = tarefasGlobais.filter(t => {
+        if (t.paraTodas) return true;
+        if (t.paraFuncionarios && emp.temFuncionarios) return true;
+        if (t.paraProLabore && emp.temProLabore) return true;
+        if (t.paraSemMovimento && emp.semMovimento) return true;
+        return false;
+      });
+
+      const total = tarefasAplicaveis.length;
+      const feitos = tarefasOk.filter(t => t.ok).length;
+
+      let statusCalc = 'NAO_INICIADO';
+      if (total > 0 && feitos >= total) statusCalc = 'FINALIZADO';
+      else if (feitos > 0) statusCalc = 'PARCIAL';
+
+      return {
+        ...emp,
+        historicos: undefined,
+        historico: historico ? { ...historico, status: statusCalc } : {
           id: null, competencia, status: 'NAO_INICIADO',
-          folhaOk: false, inssOk: false, fgtsOk: false, irOk: false,
-          proLaboreOk: false, semMovimentoOk: false, semMovimentoMes: false,
-          valorInss: null, valorFgts: null, valorIr: null,
-          dataEntregaFolha: null, dataEntregaObrig: null,
-        };
-      }
-      return { ...emp, historicos: undefined, historico };
+          semMovimentoMes: false, valorInss: null, valorFgts: null, valorIr: null,
+          dataEntregaFolha: null, dataEntregaObrig: null, tarefasOk: []
+        },
+        _totalTarefas: total,
+        _feitosTarefas: feitos,
+      };
     });
 
     const filtrado = status ? resultado.filter(e => e.historico.status === status) : resultado;
@@ -84,6 +142,7 @@ router.get('/:competencia', async (req, res) => {
   }
 });
 
+// Buscar histórico de uma empresa
 router.get('/:competencia/:empresaId', async (req, res) => {
   try {
     const { competencia, empresaId } = req.params;
@@ -94,9 +153,7 @@ router.get('/:competencia/:empresaId', async (req, res) => {
     if (!historico) {
       return res.json({
         id: null, empresaId, competencia, status: 'NAO_INICIADO',
-        folhaOk: false, inssOk: false, fgtsOk: false, irOk: false,
-        proLaboreOk: false, semMovimentoOk: false, semMovimentoMes: false,
-        valorInss: null, valorFgts: null, valorIr: null,
+        semMovimentoMes: false, valorInss: null, valorFgts: null, valorIr: null,
         dataEntregaFolha: null, dataEntregaObrig: null,
         filiais: [], tarefasOk: []
       });
@@ -108,24 +165,35 @@ router.get('/:competencia/:empresaId', async (req, res) => {
   }
 });
 
+// Salvar histórico
 router.post('/:competencia/:empresaId', async (req, res) => {
   try {
     const { competencia, empresaId } = req.params;
     const dados = req.body;
+
     const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
     const { filiaisData, tarefasOk, tarefasExtrasOk, ...resto } = dados;
-    const dadosPrincipais = filtrarCampos(resto);
-    const statusCalculado = calcularStatus(dadosPrincipais, empresa);
+    const dadosPrincipais = parseDatas(resto);
 
+    // Cria/atualiza o histórico primeiro com status provisório
     const historico = await prisma.historicoMensal.upsert({
       where: { empresaId_competencia: { empresaId, competencia } },
-      create: { empresaId, competencia, ...dadosPrincipais, status: statusCalculado, responsavelId: req.user.id },
-      update: { ...dadosPrincipais, status: statusCalculado, responsavelId: req.user.id },
+      create: {
+        empresaId, competencia,
+        ...dadosPrincipais,
+        status: 'NAO_INICIADO',
+        responsavelId: req.user.id,
+      },
+      update: {
+        ...dadosPrincipais,
+        responsavelId: req.user.id,
+      },
       include: { filiais: true, tarefasOk: true }
     });
 
+    // Salva tarefas
     if (tarefasExtrasOk?.length) {
       for (const t of tarefasExtrasOk) {
         await prisma.tarefaExtraOk.upsert({
@@ -135,6 +203,14 @@ router.post('/:competencia/:empresaId', async (req, res) => {
         });
       }
     }
+
+    // Recalcula status baseado nas tarefas
+    const statusCalculado = await calcularStatus(historico.id, empresaId);
+    const historicoFinal = await prisma.historicoMensal.update({
+      where: { id: historico.id },
+      data: { status: statusCalculado },
+      include: { filiais: true, tarefasOk: true }
+    });
 
     if (filiaisData?.length) {
       for (const filial of filiaisData) {
@@ -146,13 +222,14 @@ router.post('/:competencia/:empresaId', async (req, res) => {
       }
     }
 
-    res.json(historico);
+    res.json(historicoFinal);
   } catch (e) {
     console.error('POST /:competencia/:empresaId erro:', e);
     res.status(500).json({ error: e.message });
   }
 });
 
+// Histórico completo de uma empresa
 router.get('/historico/:empresaId', async (req, res) => {
   try {
     const historicos = await prisma.historicoMensal.findMany({
