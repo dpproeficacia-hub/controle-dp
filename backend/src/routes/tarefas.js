@@ -19,19 +19,27 @@ router.get('/:empresaId', async (req, res) => {
 
   const tarefasGlobais = await prisma.tarefaExtra.findMany({
     where: {
-      ativa: true,
-      global: true,
+      ativa: true, global: true,
       OR: [
-        { paraFuncionarios: true, AND: [{ paraFuncionarios: empresa.temFuncionarios }] },
-        { paraProLabore: true, AND: [{ paraProLabore: empresa.temProLabore }] },
-        { paraSemMovimento: true, AND: [{ paraSemMovimento: empresa.semMovimento }] },
         { paraTodas: true },
+        { paraFuncionarios: true, ...(empresa.temFuncionarios ? {} : { id: 'never' }) },
+        { paraProLabore: true, ...(empresa.temProLabore ? {} : { id: 'never' }) },
+        { paraSemMovimento: true, ...(empresa.semMovimento ? {} : { id: 'never' }) },
       ]
     },
     orderBy: { criadoEm: 'asc' }
   });
 
-  res.json([...tarefasGlobais, ...tarefasEmpresa]);
+  // Filtra manualmente para garantir
+  const globaisFiltradas = tarefasGlobais.filter(t => {
+    if (t.paraTodas) return true;
+    if (t.paraFuncionarios && empresa.temFuncionarios) return true;
+    if (t.paraProLabore && empresa.temProLabore) return true;
+    if (t.paraSemMovimento && empresa.semMovimento) return true;
+    return false;
+  });
+
+  res.json([...globaisFiltradas, ...tarefasEmpresa]);
 });
 
 // Lista todas as tarefas globais (para tela de gestão)
@@ -43,27 +51,44 @@ router.get('/globais/listar', requireNivel('GESTOR', 'ADMIN'), async (req, res) 
   res.json(tarefas);
 });
 
-// Cria tarefa para uma empresa específica
-router.post('/:empresaId', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
-  const { nome } = req.body;
-  const tarefa = await prisma.tarefaExtra.create({
-    data: { empresaId: req.params.empresaId, nome, global: false }
-  });
-  res.status(201).json(tarefa);
-});
-
 // Cria tarefa global
 router.post('/globais/criar', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
-  const { nome, paraTodas, paraFuncionarios, paraProLabore, paraSemMovimento } = req.body;
+  const { nome, paraTodas, paraFuncionarios, paraProLabore, paraSemMovimento, prazoEntregaDia } = req.body;
   const tarefa = await prisma.tarefaExtra.create({
     data: {
-      nome, global: true,
-      empresaId: null,
+      nome, global: true, empresaId: null,
       paraTodas: paraTodas || false,
       paraFuncionarios: paraFuncionarios || false,
       paraProLabore: paraProLabore || false,
       paraSemMovimento: paraSemMovimento || false,
+      prazoEntregaDia: prazoEntregaDia ? parseInt(prazoEntregaDia) : null,
     }
+  });
+  res.status(201).json(tarefa);
+});
+
+// Atualiza tarefa global
+router.put('/globais/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  const { nome, paraTodas, paraFuncionarios, paraProLabore, paraSemMovimento, prazoEntregaDia } = req.body;
+  const tarefa = await prisma.tarefaExtra.update({
+    where: { id: req.params.id },
+    data: {
+      nome,
+      paraTodas: paraTodas || false,
+      paraFuncionarios: paraFuncionarios || false,
+      paraProLabore: paraProLabore || false,
+      paraSemMovimento: paraSemMovimento || false,
+      prazoEntregaDia: prazoEntregaDia ? parseInt(prazoEntregaDia) : null,
+    }
+  });
+  res.json(tarefa);
+});
+
+// Cria tarefa para empresa específica
+router.post('/:empresaId', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  const { nome } = req.body;
+  const tarefa = await prisma.tarefaExtra.create({
+    data: { empresaId: req.params.empresaId, nome, global: false }
   });
   res.status(201).json(tarefa);
 });
