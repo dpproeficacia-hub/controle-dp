@@ -66,6 +66,8 @@ export default function Layout() {
           <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
           <NI to="/sindical">Sindical / CCT</NI>
           {isGestor && <NI to="/responsaveis">Responsáveis</NI>}
+          <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Relatórios</p>
+          <NI to="/relatorio">Relatórios</NI>
           {isAdmin && (
             <>
               <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
@@ -76,7 +78,7 @@ export default function Layout() {
 
         <div className="px-2 py-3" style={{borderTop:'1px solid rgba(255,255,255,0.1)'}}>
           <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-colors"
-            style={{}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.1)'}
+            onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.1)'}
             onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
               style={{background:'rgba(255,255,255,0.2)'}}>
@@ -94,10 +96,12 @@ export default function Layout() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-surface border-b border-border h-14 flex items-center px-6 gap-4 flex-shrink-0">
-          <div className="flex-1" />
-          <div className="flex items-center gap-2">
-            <button onClick={()=>mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
+          <div className="flex items-center gap-1 text-sm text-muted font-medium">
+            <button onClick={()=>mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2">‹</button>
+            <span className="px-2">{MESES[mes]} {ano}</span>
+            <button onClick={()=>mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2">›</button>
           </div>
+          <div className="flex-1" />
           {isGestor && (
             <button onClick={()=>navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
               style={{background: id.corPrimaria}}>
