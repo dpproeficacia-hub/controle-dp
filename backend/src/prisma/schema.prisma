@@ -47,6 +47,11 @@ enum StatusMensal {
   FINALIZADO
 }
 
+enum TipoTarefa {
+  RECORRENTE
+  PONTUAL
+}
+
 model Usuario {
   id         String      @id @default(cuid())
   nome       String
@@ -106,7 +111,6 @@ model HistoricoMensal {
   irOk             Boolean      @default(false)
   proLaboreOk      Boolean      @default(false)
   semMovimentoOk   Boolean      @default(false)
-  semMovimentoMes  Boolean      @default(false)
   valorInss        Decimal?     @db.Decimal(12,2)
   valorFgts        Decimal?     @db.Decimal(12,2)
   valorIr          Decimal?     @db.Decimal(12,2)
@@ -143,23 +147,24 @@ model ControleSindical {
   dataBase         String
   ultimaCct        Int
   reajusteAplicado Boolean  @default(false)
-  observacoes      String?
   atualizadoEm     DateTime @updatedAt
 }
 
 model TarefaExtra {
-  id               String    @id @default(cuid())
+  id               String     @id @default(cuid())
   empresaId        String?
-  empresa          Empresa?  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  empresa          Empresa?   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   nome             String
-  prazoEntregaDia  Int?
-  ativa            Boolean   @default(true)
-  global           Boolean   @default(false)
-  paraTodas        Boolean   @default(false)
-  paraFuncionarios Boolean   @default(false)
-  paraProLabore    Boolean   @default(false)
-  paraSemMovimento Boolean   @default(false)
-  criadoEm         DateTime  @default(now())
+  ativa            Boolean    @default(true)
+  global           Boolean    @default(false)
+  tipo             TipoTarefa @default(RECORRENTE)
+  diaVencimento    Int?
+  paraTodas        Boolean    @default(false)
+  paraFuncionarios Boolean    @default(false)
+  paraProLabore    Boolean    @default(false)
+  paraSemMovimento Boolean    @default(false)
+  criadoEm         DateTime   @default(now())
+  competenciaCriacao String?
   registros        TarefaExtraOk[]
 }
 
