@@ -7,88 +7,90 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-// Busca tarefas de uma empresa (próprias + globais aplicáveis)
-router.get('/:empresaId', async (req, res) => {
-  const empresa = await prisma.empresa.findUnique({ where: { id: req.params.empresaId } });
+// Busca tarefas de uma empresa para uma competência
+router.get('/:empresaId/:competencia', async (req, res) => {
+  const { empresaId, competencia } = req.params;
+  const empresa = await prisma.empresa.findUnique({ where: { id: empresaId } });
   if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
 
+  // Tarefas próprias da empresa (recorrentes sempre, pontuais só do mês)
   const tarefasEmpresa = await prisma.tarefaExtra.findMany({
-    where: { empresaId: req.params.empresaId, ativa: true, global: false },
-    orderBy: { criadoEm: 'asc' }
-  });
-
-  const tarefasGlobais = await prisma.tarefaExtra.findMany({
     where: {
-      ativa: true, global: true,
+      empresaId,
+      ativa: true,
+      global: false,
       OR: [
-        { paraTodas: true },
-        { paraFuncionarios: true, ...(empresa.temFuncionarios ? {} : { id: 'never' }) },
-        { paraProLabore: true, ...(empresa.temProLabore ? {} : { id: 'never' }) },
-        { paraSemMovimento: true, ...(empresa.semMovimento ? {} : { id: 'never' }) },
+        { tipo: 'RECORRENTE' },
+        { tipo: 'PONTUAL', competenciaCriacao: competencia }
       ]
     },
-    orderBy: { criadoEm: 'asc' }
+    orderBy: { diaVencimento: 'asc' }
   });
 
-  // Filtra manualmente para garantir
-  const globaisFiltradas = tarefasGlobais.filter(t => {
-    if (t.paraTodas) return true;
-    if (t.paraFuncionarios && empresa.temFuncionarios) return true;
-    if (t.paraProLabore && empresa.temProLabore) return true;
-    if (t.paraSemMovimento && empresa.semMovimento) return true;
-    return false;
+  // Tarefas globais aplicáveis
+  const tarefasGlobais = await prisma.tarefaExtra.findMany({
+    where: {
+      ativa: true,
+      global: true,
+      OR: [
+        { tipo: 'RECORRENTE' },
+        { tipo: 'PONTUAL', competenciaCriacao: competencia }
+      ],
+      AND: [{
+        OR: [
+          { paraTodas: true },
+          { paraFuncionarios: empresa.temFuncionarios ? true : undefined },
+          { paraProLabore: empresa.temProLabore ? true : undefined },
+          { paraSemMovimento: empresa.semMovimento ? true : undefined },
+        ]
+      }]
+    },
+    orderBy: { diaVencimento: 'asc' }
   });
 
-  res.json([...globaisFiltradas, ...tarefasEmpresa]);
+  res.json([...tarefasGlobais, ...tarefasEmpresa]);
 });
 
-// Lista todas as tarefas globais (para tela de gestão)
+// Busca tarefas globais
 router.get('/globais/listar', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   const tarefas = await prisma.tarefaExtra.findMany({
     where: { global: true, ativa: true },
-    orderBy: { criadoEm: 'asc' }
+    orderBy: [{ tipo: 'asc' }, { diaVencimento: 'asc' }]
   });
   res.json(tarefas);
 });
 
-// Cria tarefa global
-router.post('/globais/criar', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
-  const { nome, paraTodas, paraFuncionarios, paraProLabore, paraSemMovimento, prazoEntregaDia } = req.body;
+// Cria tarefa para empresa específica
+router.post('/:empresaId', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  const { nome, tipo, diaVencimento, competencia } = req.body;
   const tarefa = await prisma.tarefaExtra.create({
     data: {
-      nome, global: true, empresaId: null,
-      paraTodas: paraTodas || false,
-      paraFuncionarios: paraFuncionarios || false,
-      paraProLabore: paraProLabore || false,
-      paraSemMovimento: paraSemMovimento || false,
-      prazoEntregaDia: prazoEntregaDia ? parseInt(prazoEntregaDia) : null,
+      empresaId: req.params.empresaId,
+      nome,
+      tipo: tipo || 'RECORRENTE',
+      diaVencimento: diaVencimento ? Number(diaVencimento) : null,
+      global: false,
+      competenciaCriacao: tipo === 'PONTUAL' ? competencia : null
     }
   });
   res.status(201).json(tarefa);
 });
 
-// Atualiza tarefa global
-router.put('/globais/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
-  const { nome, paraTodas, paraFuncionarios, paraProLabore, paraSemMovimento, prazoEntregaDia } = req.body;
-  const tarefa = await prisma.tarefaExtra.update({
-    where: { id: req.params.id },
+// Cria tarefa global
+router.post('/globais/criar', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  const { nome, tipo, diaVencimento, paraTodas, paraFuncionarios, paraProLabore, paraSemMovimento, competencia } = req.body;
+  const tarefa = await prisma.tarefaExtra.create({
     data: {
       nome,
+      tipo: tipo || 'RECORRENTE',
+      diaVencimento: diaVencimento ? Number(diaVencimento) : null,
+      global: true,
       paraTodas: paraTodas || false,
       paraFuncionarios: paraFuncionarios || false,
       paraProLabore: paraProLabore || false,
       paraSemMovimento: paraSemMovimento || false,
-      prazoEntregaDia: prazoEntregaDia ? parseInt(prazoEntregaDia) : null,
+      competenciaCriacao: tipo === 'PONTUAL' ? competencia : null
     }
-  });
-  res.json(tarefa);
-});
-
-// Cria tarefa para empresa específica
-router.post('/:empresaId', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
-  const { nome } = req.body;
-  const tarefa = await prisma.tarefaExtra.create({
-    data: { empresaId: req.params.empresaId, nome, global: false }
   });
   res.status(201).json(tarefa);
 });
