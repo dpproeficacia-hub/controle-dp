@@ -13,46 +13,33 @@ export default function EmpresaDetalhe() {
   const navigate = useNavigate();
   const { isGestor } = useAuth();
   const competencia = state?.competencia || new Date().toISOString().slice(0,7);
+  const [mesAno] = competencia.split('-');
+  const anoComp = parseInt(competencia.split('-')[0]);
+  const mesComp = parseInt(competencia.split('-')[1]);
 
   const [empresa, setEmpresa] = useState(null);
   const [historico, setHistorico] = useState(null);
-  const [tarefas, setTarefas] = useState([]);
-  const [novaTarefa, setNovaTarefa] = useState('');
+  const [tarefasExtras, setTarefasExtras] = useState([]);
+  const [novaTarefa, setNovaTarefa] = useState({ nome:'', tipo:'RECORRENTE', diaVencimento:'' });
+  const [mostraFormTarefa, setMostraFormTarefa] = useState(false);
   const [adicionandoTarefa, setAdicionandoTarefa] = useState(false);
   const [salvando, setSalvando] = useState(false);
   const [salvo, setSalvo] = useState(false);
-  const [semMovimentoMes, setSemMovimentoMes] = useState(false);
 
   useEffect(() => {
     Promise.all([
       api.get(`/empresas/${empresaId}`),
       api.get(`/mensal/${competencia}/${empresaId}`),
-      api.get(`/tarefas/${empresaId}`)
+      api.get(`/tarefas/${empresaId}/${competencia}`)
     ]).then(([e, h, t]) => {
       setEmpresa(e.data);
       setHistorico(h.data);
-      setTarefas(t.data);
-      if (e.data.temProLabore && !e.data.temFuncionarios && h.data.semMovimentoMes) {
-        setSemMovimentoMes(true);
-      }
+      setTarefasExtras(t.data);
     });
   }, [empresaId, competencia]);
 
-  function isTarefaOk(tarefaId) {
-    if (!historico?.tarefasOk) return false;
-    const t = historico.tarefasOk.find(t => t.tarefaId === tarefaId);
-    return t?.ok || false;
-  }
-
-  function toggleTarefa(tarefaId) {
-    setHistorico(h => ({
-      ...h,
-      tarefasOk: h.tarefasOk
-        ? h.tarefasOk.some(t => t.tarefaId === tarefaId)
-          ? h.tarefasOk.map(t => t.tarefaId === tarefaId ? { ...t, ok: !t.ok } : t)
-          : [...h.tarefasOk, { tarefaId, ok: true }]
-        : [{ tarefaId, ok: true }]
-    }));
+  function toggle(campo) {
+    setHistorico(h => ({ ...h, [campo]: !h[campo] }));
     setSalvo(false);
   }
 
@@ -61,18 +48,32 @@ export default function EmpresaDetalhe() {
     setSalvo(false);
   }
 
-  function toggleSemMovimentoMes(val) {
-    setSemMovimentoMes(val);
+  function toggleTarefaExtra(tarefaId) {
+    setHistorico(h => ({
+      ...h,
+      tarefasOk: h.tarefasOk
+        ? h.tarefasOk.find(t => t.tarefaId === tarefaId)
+          ? h.tarefasOk.map(t => t.tarefaId === tarefaId ? { ...t, ok: !t.ok } : t)
+          : [...h.tarefasOk, { tarefaId, ok: true }]
+        : [{ tarefaId, ok: true }]
+    }));
     setSalvo(false);
   }
 
-  async function adicionarTarefa() {
-    if (!novaTarefa.trim()) return;
+  function isTarefaOk(tarefaId) {
+    if (!historico?.tarefasOk) return false;
+    return historico.tarefasOk.find(t => t.tarefaId === tarefaId)?.ok || false;
+  }
+
+  async function adicionarTarefa(e) {
+    e.preventDefault();
+    if (!novaTarefa.nome.trim()) return;
     setAdicionandoTarefa(true);
     try {
-      const { data } = await api.post(`/tarefas/${empresaId}`, { nome: novaTarefa.trim() });
-      setTarefas(t => [...t, data]);
-      setNovaTarefa('');
+      const { data } = await api.post(`/tarefas/${empresaId}`, { ...novaTarefa, competencia });
+      setTarefasExtras(t => [...t, data].sort((a,b) => (a.diaVencimento||99) - (b.diaVencimento||99)));
+      setNovaTarefa({ nome:'', tipo:'RECORRENTE', diaVencimento:'' });
+      setMostraFormTarefa(false);
     } finally {
       setAdicionandoTarefa(false);
     }
@@ -81,29 +82,21 @@ export default function EmpresaDetalhe() {
   async function removerTarefa(id) {
     if (!window.confirm('Remover esta tarefa?')) return;
     await api.delete(`/tarefas/${id}`);
-    setTarefas(t => t.filter(x => x.id !== id));
+    setTarefasExtras(t => t.filter(x => x.id !== id));
   }
 
   async function salvar() {
     setSalvando(true);
     try {
       const payload = {
-        semMovimentoMes,
-        dataEntregaFolha: historico.dataEntregaFolha?.slice?.(0,10) || historico.dataEntregaFolha || null,
-        dataEntregaObrig: historico.dataEntregaObrig?.slice?.(0,10) || historico.dataEntregaObrig || null,
-        valorInss: historico.valorInss,
-        valorFgts: historico.valorFgts,
-        valorIr: historico.valorIr,
-        tarefasExtrasOk: tarefas.map(t => ({
-          tarefaId: t.id,
-          ok: isTarefaOk(t.id)
-        }))
+        ...historico,
+        tarefasExtrasOk: tarefasExtras.map(t => ({ tarefaId: t.id, ok: isTarefaOk(t.id) }))
       };
       const { data } = await api.post(`/mensal/${competencia}/${empresaId}`, payload);
       setHistorico(data);
       setSalvo(true);
       setTimeout(() => setSalvo(false), 2500);
-    } catch (e) {
+    } catch {
       alert('Erro ao salvar. Tente novamente.');
     } finally {
       setSalvando(false);
@@ -114,18 +107,18 @@ export default function EmpresaDetalhe() {
     <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>
   );
 
-  const tarefasAplicaveis = semMovimentoMes
-    ? tarefas.filter(t => t.paraSemMovimento || t.paraTodas || !t.global)
-    : tarefas;
+  const camposFolha = empresa.temFuncionarios
+    ? [{ key:'folhaOk', label:'Folha de pagamento' }, { key:'inssOk', label:'INSS', valorKey:'valorInss' }, { key:'fgtsOk', label:'FGTS', valorKey:'valorFgts' }, { key:'irOk', label:'IR (IRRF)', valorKey:'valorIr' }]
+    : empresa.temProLabore
+    ? [{ key:'proLaboreOk', label:'Pró-labore' }, { key:'inssOk', label:'INSS', valorKey:'valorInss' }, { key:'fgtsOk', label:'FGTS', valorKey:'valorFgts' }]
+    : [{ key:'semMovimentoOk', label:'Declarado sem movimento' }];
 
-  const total = tarefasAplicaveis.length;
-  const feitos = tarefasAplicaveis.filter(t => isTarefaOk(t.id)).length;
-  const pct = total ? Math.round((feitos / total) * 100) : 0;
+  const totalObrig = camposFolha.length + tarefasExtras.length;
+  const feitosObrig = camposFolha.filter(c => historico[c.key]).length + tarefasExtras.filter(t => isTarefaOk(t.id)).length;
+  const pct = totalObrig ? Math.round((feitosObrig/totalObrig)*100) : 0;
+  const totalFinanceiro = [historico.valorInss, historico.valorFgts, historico.valorIr].reduce((acc, v) => acc + (parseFloat(v)||0), 0);
 
-  const totalFinanceiro = [historico.valorInss, historico.valorFgts, historico.valorIr]
-    .reduce((acc, v) => acc + (parseFloat(v) || 0), 0);
-
-  const ehProLabore = empresa.temProLabore && !empresa.temFuncionarios;
+  const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
   return (
     <div>
@@ -147,139 +140,169 @@ export default function EmpresaDetalhe() {
               {empresa.temFuncionarios && <span className="pill pill-green">Com funcionários</span>}
               {empresa.temProLabore && <span className="pill pill-blue">Pró-labore</span>}
               {empresa.semMovimento && <span className="pill pill-gray">Sem movimento</span>}
-              {semMovimentoMes && <span className="pill pill-amber">Sem movimento este mês</span>}
               {empresa.enviaReinf && <span className="pill pill-purple">REINF</span>}
               {empresa.fatorR && <span className="pill pill-teal">Fator R</span>}
             </div>
           </div>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
-            empresa.nivel==='N1'?'bg-ink text-bg':empresa.nivel==='N2'?'bg-red-100 text-red-800':empresa.nivel==='N3'?'bg-amber-100 text-amber-800':empresa.nivel==='N4'?'bg-blue-100 text-blue-800':'bg-green-100 text-green-800'
-          }`}>{empresa.nivel}</div>
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${empresa.nivel==='N1'?'bg-ink text-bg':empresa.nivel==='N2'?'bg-red-100 text-red-800':empresa.nivel==='N3'?'bg-amber-100 text-amber-800':empresa.nivel==='N4'?'bg-blue-100 text-blue-800':'bg-green-100 text-green-800'}`}>{empresa.nivel}</div>
           <button onClick={() => navigate(`/empresas/${empresa.id}/editar`)} className="btn btn-secondary text-xs">Editar cadastro</button>
         </div>
       </div>
 
       <div className="grid grid-cols-[1fr_300px] gap-4">
-        <div>
-          <div className="card mb-4">
+        <div className="space-y-4">
+
+          {/* OBRIGAÇÕES DA FOLHA */}
+          <div className="card">
             <div className="card-header">
-              <span className="card-title">Controle Mensal — {competencia}</span>
-              <div className="flex items-center gap-3">
-                {ehProLabore && (
-                  <button
-                    onClick={() => toggleSemMovimentoMes(!semMovimentoMes)}
-                    className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border transition-all ${
-                      semMovimentoMes
-                        ? 'bg-amber-100 text-amber-800 border-amber-300'
-                        : 'bg-surface text-muted border-border hover:border-border2'
-                    }`}>
-                    {semMovimentoMes ? '⚠ Sem movimento este mês' : 'Enviar sem movimento?'}
-                  </button>
-                )}
-                <span className={`pill ${feitos===total && total>0 ?'pill-green':feitos>0?'pill-amber':'pill-red'}`}>
-                  {feitos}/{total} {feitos===total && total>0 ?'✓':''}
-                </span>
+              <div>
+                <span className="card-title">📋 Obrigações da Folha</span>
+                <span className="text-xs text-faint ml-2">{MESES[mesComp-1]} {anoComp}</span>
               </div>
+              <span className={`pill ${camposFolha.filter(c=>historico[c.key]).length===camposFolha.length?'pill-green':camposFolha.filter(c=>historico[c.key]).length>0?'pill-amber':'pill-red'}`}>
+                {camposFolha.filter(c=>historico[c.key]).length}/{camposFolha.length}
+              </span>
             </div>
-
             <div>
-              {tarefasAplicaveis.length === 0 ? (
-                <div className="px-5 py-8 text-center text-sm text-faint">
-                  Nenhuma tarefa cadastrada para este tipo de empresa.
-                  <br />
-                  <span className="text-xs">Acesse <strong>Tarefas Extras</strong> no menu para cadastrar.</span>
+              {camposFolha.map(c => (
+                <div key={c.key} onClick={() => toggle(c.key)}
+                  className={`check-item ${historico[c.key]?'done':''}`}>
+                  <div className={`check-box ${historico[c.key]?'done':''}`}>
+                    {historico[c.key] && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#F4F3EF" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+                  </div>
+                  <span className="check-label flex-1 text-sm font-medium">{c.label}</span>
+                  {c.valorKey && (
+                    <input onClick={e=>e.stopPropagation()} className="input w-32 text-xs h-8" placeholder="R$ 0,00"
+                      defaultValue={historico[c.valorKey] ? fmtMoeda(historico[c.valorKey]) : ''}
+                      onBlur={e => setValor(c.valorKey, parseMoeda(e.target.value))} />
+                  )}
+                  <span className={`pill ml-2 ${historico[c.key]?'pill-green':'pill-gray'}`}>{historico[c.key]?'OK':'—'}</span>
                 </div>
-              ) : (
-                tarefasAplicaveis.map(t => {
-                  const ok = isTarefaOk(t.id);
-                  return (
-                    <div key={t.id} onClick={() => toggleTarefa(t.id)}
-                      className={`check-item ${ok ? 'done' : ''}`}>
-                      <div className={`check-box ${ok ? 'done' : ''}`}>
-                        {ok && (
-                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-                            <path d="M2 6l3 3 5-5" stroke="#F4F3EF" strokeWidth="1.8" strokeLinecap="round"/>
-                          </svg>
-                        )}
-                      </div>
-                      <span className="check-label flex-1 text-sm font-medium">{t.nome}</span>
-                      {t.prazoEntregaDia && (
-                        <span className="text-xs text-faint mr-2">Prazo: dia {t.prazoEntregaDia}</span>
-                      )}
-                      <span className={`pill ml-2 ${ok ? 'pill-green' : 'pill-gray'}`}>
-                        {ok ? 'OK' : '—'}
-                      </span>
-                      {!t.global && isGestor && (
-                        <button onClick={e => { e.stopPropagation(); removerTarefa(t.id); }}
-                          className="ml-2 text-xs text-red-400 hover:text-red-600">✕</button>
-                      )}
-                    </div>
-                  );
-                })
-              )}
-
-              {isGestor && (
-                <div className="px-5 py-3 border-t border-border flex items-center gap-2">
-                  <input
-                    className="input flex-1 h-8 text-xs"
-                    placeholder="+ Adicionar tarefa específica para esta empresa..."
-                    value={novaTarefa}
-                    onChange={e => setNovaTarefa(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && adicionarTarefa()}
-                  />
-                  <button onClick={adicionarTarefa} disabled={adicionandoTarefa || !novaTarefa.trim()}
-                    className="btn btn-secondary text-xs h-8 px-3">
-                    {adicionandoTarefa ? '...' : 'Adicionar'}
-                  </button>
-                </div>
-              )}
+              ))}
             </div>
-
-            <div className="px-5 py-3 bg-surface2 border-t border-border flex items-end gap-5 flex-wrap">
+            <div className="px-5 py-3 bg-surface2 border-t border-border flex items-end gap-5">
               <div>
                 <label className="label">Entrega da folha</label>
                 <input type="date" className="input w-40 h-8 text-xs"
-                  value={historico.dataEntregaFolha?.slice?.(0,10) || ''}
-                  onChange={e => setValor('dataEntregaFolha', e.target.value)} />
+                  value={historico.dataEntregaFolha?.slice(0,10)||''}
+                  onChange={e=>setValor('dataEntregaFolha',e.target.value)} />
               </div>
               <div>
                 <label className="label">Entrega obrigações</label>
                 <input type="date" className="input w-40 h-8 text-xs"
-                  value={historico.dataEntregaObrig?.slice?.(0,10) || ''}
-                  onChange={e => setValor('dataEntregaObrig', e.target.value)} />
+                  value={historico.dataEntregaObrig?.slice(0,10)||''}
+                  onChange={e=>setValor('dataEntregaObrig',e.target.value)} />
               </div>
               <button onClick={salvar} disabled={salvando} className="btn btn-primary ml-auto">
-                {salvando
-                  ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
-                  : salvo ? '✓ Salvo!' : 'Salvar'}
+                {salvando ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin"/> : salvo ? '✓ Salvo!' : 'Salvar'}
               </button>
+            </div>
+          </div>
+
+          {/* OBRIGAÇÕES EXTRAS */}
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <span className="card-title">⚡ Obrigações Extras</span>
+                <span className="text-xs text-faint ml-2">ordenadas por vencimento</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`pill ${tarefasExtras.filter(t=>isTarefaOk(t.id)).length===tarefasExtras.length&&tarefasExtras.length>0?'pill-green':tarefasExtras.filter(t=>isTarefaOk(t.id)).length>0?'pill-amber':'pill-gray'}`}>
+                  {tarefasExtras.filter(t=>isTarefaOk(t.id)).length}/{tarefasExtras.length}
+                </span>
+                {isGestor && (
+                  <button onClick={()=>setMostraFormTarefa(!mostraFormTarefa)} className="btn btn-secondary text-xs h-7 px-2">
+                    {mostraFormTarefa ? 'Cancelar' : '+ Adicionar'}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {mostraFormTarefa && (
+              <form onSubmit={adicionarTarefa} className="px-5 py-4 bg-surface2 border-b border-border">
+                <div className="grid grid-cols-3 gap-3 items-end">
+                  <div className="col-span-1">
+                    <label className="label">Nome da obrigação</label>
+                    <input className="input h-8 text-xs" required value={novaTarefa.nome}
+                      onChange={e=>setNovaTarefa(f=>({...f,nome:e.target.value}))}
+                      placeholder="Ex: Previsão de férias" />
+                  </div>
+                  <div>
+                    <label className="label">Dia de vencimento</label>
+                    <input className="input h-8 text-xs" type="number" min="1" max="31"
+                      value={novaTarefa.diaVencimento}
+                      onChange={e=>setNovaTarefa(f=>({...f,diaVencimento:e.target.value}))}
+                      placeholder="Ex: 15" />
+                  </div>
+                  <div>
+                    <label className="label">Tipo</label>
+                    <select className="select h-8 text-xs" value={novaTarefa.tipo}
+                      onChange={e=>setNovaTarefa(f=>({...f,tipo:e.target.value}))}>
+                      <option value="RECORRENTE">Recorrente (todo mês)</option>
+                      <option value="PONTUAL">Pontual (só este mês)</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="submit" disabled={adicionandoTarefa} className="btn btn-primary text-xs mt-3">
+                  {adicionandoTarefa ? '...' : 'Adicionar obrigação'}
+                </button>
+              </form>
+            )}
+
+            <div>
+              {tarefasExtras.length === 0 && !mostraFormTarefa && (
+                <div className="px-5 py-8 text-center text-sm text-faint">
+                  Nenhuma obrigação extra cadastrada.
+                  {isGestor && <span className="block mt-1 text-blue-600 cursor-pointer hover:underline" onClick={()=>setMostraFormTarefa(true)}>+ Adicionar agora</span>}
+                </div>
+              )}
+              {tarefasExtras.map(t => (
+                <div key={t.id} onClick={()=>toggleTarefaExtra(t.id)}
+                  className={`check-item ${isTarefaOk(t.id)?'done':''}`}>
+                  <div className={`check-box ${isTarefaOk(t.id)?'done':''}`}>
+                    {isTarefaOk(t.id) && <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 6l3 3 5-5" stroke="#F4F3EF" strokeWidth="1.8" strokeLinecap="round"/></svg>}
+                  </div>
+                  <div className="flex-1 flex items-center gap-3">
+                    {t.diaVencimento && (
+                      <span className={`text-xs font-bold px-2 py-0.5 rounded-lg flex-shrink-0 ${
+                        t.diaVencimento <= new Date().getDate() && !isTarefaOk(t.id)
+                          ? 'bg-red-50 text-red-700' : 'bg-surface2 text-muted'
+                      }`}>
+                        Dia {t.diaVencimento}
+                      </span>
+                    )}
+                    <span className="check-label text-sm font-medium">{t.nome}</span>
+                    <span className={`pill text-[10px] ${t.tipo==='RECORRENTE'?'pill-blue':'pill-amber'}`}>
+                      {t.tipo==='RECORRENTE'?'Recorrente':'Pontual'}
+                    </span>
+                  </div>
+                  <span className={`pill ml-2 ${isTarefaOk(t.id)?'pill-green':'pill-gray'}`}>{isTarefaOk(t.id)?'OK':'—'}</span>
+                  {isGestor && (
+                    <button onClick={e=>{e.stopPropagation();removerTarefa(t.id);}} className="ml-2 text-xs text-red-400 hover:text-red-600">✕</button>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
 
           {empresa.observacoes && (
             <div className="card p-4">
               <p className="label mb-2">Observações</p>
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 leading-relaxed">
-                {empresa.observacoes}
-              </div>
+              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800 leading-relaxed">{empresa.observacoes}</div>
             </div>
           )}
         </div>
 
         <div className="flex flex-col gap-4">
           <div className="card p-4 text-center">
-            <p className="font-display font-bold text-4xl" style={{color: pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D'}}>{pct}%</p>
-            <p className="text-xs text-faint mt-1">
-              {pct===100?'Finalizado':pct>0?'Em andamento':'Não iniciado'}
-            </p>
+            <p className="font-display font-bold text-4xl" style={{color:pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D'}}>{pct}%</p>
+            <p className="text-xs text-faint mt-1">{pct===100?'Finalizado':pct>0?'Em andamento':'Não iniciado'}</p>
             <div className="progress-bar mt-3">
-              <div className="progress-fill" style={{ width:`${pct}%`, background: pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D' }} />
+              <div className="progress-fill" style={{width:`${pct}%`,background:pct===100?'#3B6D11':pct>0?'#854F0B':'#A32D2D'}}/>
             </div>
-            {pct < 100 && (
-              <p className="text-xs text-faint mt-2">{feitos}/{total} tarefas concluídas</p>
-            )}
+            <p className="text-xs text-faint mt-2">{feitosObrig}/{totalObrig} concluídas</p>
           </div>
 
           <div className="card">
@@ -288,17 +311,12 @@ export default function EmpresaDetalhe() {
               {[['INSS','valorInss'],['FGTS','valorFgts'],['IR','valorIr']].map(([l,k]) => (
                 <div key={k} className="flex justify-between text-sm">
                   <span className="text-muted">{l}</span>
-                  <input
-                    className="input w-28 text-xs h-7 text-right"
-                    placeholder="R$ 0,00"
-                    defaultValue={historico[k] ? fmtMoeda(historico[k]) : ''}
-                    onBlur={e => setValor(k, parseMoeda(e.target.value))}
-                  />
+                  <span className="font-semibold">{historico[k]?fmtMoeda(historico[k]):'—'}</span>
                 </div>
               ))}
               <div className="border-t border-border pt-2.5 flex justify-between text-sm">
                 <span className="font-semibold">Total</span>
-                <span className="font-bold text-green-700">{totalFinanceiro > 0 ? fmtMoeda(totalFinanceiro) : '—'}</span>
+                <span className="font-bold text-green-700">{totalFinanceiro>0?fmtMoeda(totalFinanceiro):'—'}</span>
               </div>
             </div>
           </div>
@@ -307,11 +325,7 @@ export default function EmpresaDetalhe() {
             <div className="card">
               <div className="card-header"><span className="card-title">Controle Sindical</span></div>
               <div className="p-4 space-y-2">
-                {[
-                  ['Sindicato', empresa.sindical.sindicato],
-                  ['Data-base', empresa.sindical.dataBase],
-                  ['Última CCT', empresa.sindical.ultimaCct],
-                ].map(([l,v]) => (
+                {[['Sindicato',empresa.sindical.sindicato],['Data-base',empresa.sindical.dataBase],['Última CCT',empresa.sindical.ultimaCct]].map(([l,v]) => (
                   <div key={l} className="flex justify-between text-xs">
                     <span className="text-faint">{l}</span>
                     <span className="font-medium text-right max-w-[160px]">{v}</span>
@@ -319,14 +333,14 @@ export default function EmpresaDetalhe() {
                 ))}
                 <div className="flex justify-between text-xs">
                   <span className="text-faint">Status CCT</span>
-                  <span className={`pill text-[10px] ${empresa.sindical.ultimaCct >= new Date().getFullYear() ? 'pill-green' : 'pill-red'}`}>
-                    {empresa.sindical.ultimaCct >= new Date().getFullYear() ? 'Atualizada' : 'Desatualizada'}
+                  <span className={`pill text-[10px] ${empresa.sindical.ultimaCct>=new Date().getFullYear()?'pill-green':'pill-red'}`}>
+                    {empresa.sindical.ultimaCct>=new Date().getFullYear()?'Atualizada':'Desatualizada'}
                   </span>
                 </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-faint">Reajuste</span>
-                  <span className={`pill text-[10px] ${empresa.sindical.reajusteAplicado ? 'pill-green' : 'pill-red'}`}>
-                    {empresa.sindical.reajusteAplicado ? 'Aplicado' : 'Pendente'}
+                  <span className={`pill text-[10px] ${empresa.sindical.reajusteAplicado?'pill-green':'pill-red'}`}>
+                    {empresa.sindical.reajusteAplicado?'Aplicado':'Pendente'}
                   </span>
                 </div>
               </div>
