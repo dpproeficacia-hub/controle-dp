@@ -9,8 +9,7 @@ const mensalRoutes = require('./src/routes/mensal');
 const sindicalRoutes = require('./src/routes/sindical');
 const responsaveisRoutes = require('./src/routes/responsaveis');
 const dashboardRoutes = require('./src/routes/dashboard');
-const tarefasRoutes = require('./src/routes/tarefas');
-const relatorioRoutes = require('./src/routes/relatorio');
+const gruposRoutes = require('./src/routes/grupos');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -45,12 +44,10 @@ app.use('/api/mensal', mensalRoutes);
 app.use('/api/sindical', sindicalRoutes);
 app.use('/api/responsaveis', responsaveisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/tarefas', tarefasRoutes);
-app.use('/api/relatorio', relatorioRoutes);
+app.use('/api/grupos', gruposRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.status(500).json({ error: 'Erro interno' });
 });
 
