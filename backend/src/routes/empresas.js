@@ -10,7 +10,95 @@ router.use(authMiddleware);
 // Listar controle mensal por competência
 router.get('/:competencia', async (req, res) => {
   try {
-    const { competencia } = req.params;
+    const { competencia } = req.params;const express = require('express');
+const { PrismaClient } = require('@prisma/client');
+const { authMiddleware, requireNivel } = require('../middleware/auth');
+
+const router = express.Router();
+const prisma = new PrismaClient();
+
+router.use(authMiddleware);
+
+router.get('/', async (req, res) => {
+  try {
+    const { responsavelId, nivel, tipo, semMovimento, temFuncionarios, temProLabore, enviaReinf, fatorR, incluirSaiu } = req.query;
+
+    const where = { ativa: true };
+
+    if (req.user.nivel === 'OPERADOR') {
+      where.responsavelId = req.user.id;
+      where.saiuDoEscritorio = false;
+    } else {
+      if (!incluirSaiu || incluirSaiu === 'false') where.saiuDoEscritorio = false;
+      if (responsavelId) where.responsavelId = responsavelId;
+    }
+
+    if (nivel) where.nivel = nivel;
+    if (tipo) where.tipo = tipo;
+    if (semMovimento !== undefined) where.semMovimento = semMovimento === 'true';
+    if (temFuncionarios !== undefined) where.temFuncionarios = temFuncionarios === 'true';
+    if (temProLabore !== undefined) where.temProLabore = temProLabore === 'true';
+    if (enviaReinf !== undefined) where.enviaReinf = enviaReinf === 'true';
+    if (fatorR !== undefined) where.fatorR = fatorR === 'true';
+
+    const empresas = await prisma.empresa.findMany({
+      where,
+      include: {
+        responsavel: { select: { id: true, nome: true } },
+        sindical: true,
+        filiais: true,
+      },
+      orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
+    });
+
+    res.json(empresas);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.get('/:id', async (req, res) => {
+  try {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: req.params.id },
+      include: {
+        responsavel: { select: { id: true, nome: true } },
+        sindical: true,
+        filiais: true,
+      }
+    });
+    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
+    res.json(empresa);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const {
+      razaoSocial, cnpj, enquadramento, tipo, nivel, prazoEntrega,
+      temFuncionarios, temProLabore, semMovimento, temFilial,
+      fatorR, enviaReinf, observacoes, responsavelId
+    } = req.body;
+
+    const cnpjLimpo = cnpj ? cnpj.replace(/\D/g, '') : '';
+    const prazo = prazoEntrega === '' || prazoEntrega === null || prazoEntrega === undefined
+      ? null : Number(prazoEntrega) || null;
+
+    const empresa = await prisma.empresa.create({
+      data: {
+        razaoSocial, cnpj: cnpjLimpo, enquadramento, tipo,
+        nivel: nivel || 'N3',
+        prazoEntrega: prazo,
+        temFuncionarios: temFuncionarios || false,
+        temProLabore: temProLabore || false,
+        semMovimento: semMovimento || false,
+        temFilial: temFilial || false,
+        fatorR: fatorR || false,
+        enviaReinf: enviaReinf || false,
+        observacoes: observacoes || null,
+        responsavelId: responsavelId || null,
     const { status, responsavelId } = req.query;
 
     const whereEmpresa = { ativa: true };
