@@ -10,8 +10,8 @@ import EmpresaForm from './pages/EmpresaForm';
 import Sindical from './pages/Sindical';
 import Responsaveis from './pages/Responsaveis';
 import Identidade from './pages/Identidade';
-import Relatorio from './pages/Relatorio';
-import Tarefas from './pages/Tarefas';
+import Importacao from './pages/Importacao';
+import Agenda from './pages/Agenda';
 
 function Protegido({ children }) {
   const { usuario, carregando } = useAuth();
@@ -43,8 +43,8 @@ export default function App() {
             <Route path="sindical" element={<Sindical />} />
             <Route path="responsaveis" element={<Responsaveis />} />
             <Route path="identidade" element={<Identidade />} />
-            <Route path="relatorio" element={<Relatorio />} />
-            <Route path="tarefas" element={<Tarefas />} />
+            <Route path="importacao" element={<Importacao />} />
+            <Route path="agenda" element={<Agenda />} />
           </Route>
         </Routes>
       </BrowserRouter>
