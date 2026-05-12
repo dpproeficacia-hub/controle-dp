@@ -19,15 +19,17 @@ export default function EmpresaForm() {
   });
 
   const [sindical, setSindical] = useState({
-    sindicato:'', dataBase:'', ultimaCct: new Date().getFullYear(), reajusteAplicado: false
+    sindicatoId:'', ultimaCct: new Date().getFullYear(), reajusteAplicado:false
   });
 
+  const [sindicatos, setSindicatos] = useState([]);
   const [responsaveis, setResponsaveis] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
 
   useEffect(() => {
     api.get('/responsaveis').then(r => setResponsaveis(r.data));
+    api.get('/sindical/sindicatos').then(r => setSindicatos(r.data));
     if (isEdicao) {
       api.get(`/empresas/${id}`).then(r => {
         const d = r.data;
@@ -41,8 +43,7 @@ export default function EmpresaForm() {
         });
         if (d.sindical) {
           setSindical({
-            sindicato: d.sindical.sindicato || '',
-            dataBase: d.sindical.dataBase || '',
+            sindicatoId: d.sindical.sindicatoId || '',
             ultimaCct: d.sindical.ultimaCct || new Date().getFullYear(),
             reajusteAplicado: d.sindical.reajusteAplicado || false
           });
@@ -53,6 +54,8 @@ export default function EmpresaForm() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
   const setSind = (k, v) => setSindical(f => ({ ...f, [k]: v }));
+
+  const sindicatoSelecionado = sindicatos.find(s => s.id === sindical.sindicatoId);
 
   async function salvar(e) {
     e.preventDefault();
@@ -65,7 +68,7 @@ export default function EmpresaForm() {
         const { data } = await api.post('/empresas', form);
         empresaId = data.id;
       }
-      if (sindical.sindicato) {
+      if (sindical.sindicatoId) {
         await api.put(`/sindical/${empresaId}`, sindical);
       }
       navigate('/empresas');
@@ -95,7 +98,6 @@ export default function EmpresaForm() {
       </div>
 
       <form onSubmit={salvar} className="max-w-2xl space-y-4">
-
         <div className="card">
           <div className="card-header"><span className="card-title">Dados principais</span></div>
           <div className="p-5 grid grid-cols-2 gap-4">
@@ -129,7 +131,7 @@ export default function EmpresaForm() {
             <div>
               <label className="label">Nível de complexidade</label>
               <select className="select" value={form.nivel} onChange={e => set('nivel',e.target.value)}>
-                {NIVEIS.map(n => <option key={n} value={n}>{n} — {n==='N1'?'Mais complexo / urgente':n==='N5'?'Menos complexo / sem movimento':'Intermediário'}</option>)}
+                {NIVEIS.map(n => <option key={n} value={n}>{n} — {n==='N1'?'Mais complexo':n==='N5'?'Menos complexo':'Intermediário'}</option>)}
               </select>
             </div>
             <div>
@@ -153,25 +155,39 @@ export default function EmpresaForm() {
 
         <div className="card">
           <div className="card-header"><span className="card-title">Controle Sindical / CCT</span></div>
-          <div className="p-5 grid grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="label">Nome do sindicato</label>
-              <input className="input" value={sindical.sindicato} onChange={e => setSind('sindicato',e.target.value)} placeholder="Ex: Sindicato dos Comerciários MG" />
-            </div>
+          <div className="p-5 space-y-4">
             <div>
-              <label className="label">Data-base (dia/mês)</label>
-              <input className="input" value={sindical.dataBase} onChange={e => setSind('dataBase',e.target.value)} placeholder="Ex: 01/03" />
+              <label className="label">Sindicato</label>
+              <select className="select" value={sindical.sindicatoId}
+                onChange={e => setSind('sindicatoId', e.target.value)}>
+                <option value="">Sem sindicato vinculado</option>
+                {sindicatos.map(s => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
+                ))}
+              </select>
+              {sindicatoSelecionado && (
+                <p className="text-xs text-muted mt-1">
+                  Data-base: <span className="font-medium text-ink">{sindicatoSelecionado.dataBase}</span>
+                  {sindicatoSelecionado.observacoes && <span className="ml-2 text-faint">· {sindicatoSelecionado.observacoes}</span>}
+                </p>
+              )}
+              {sindicatos.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">Nenhum sindicato cadastrado. Acesse Sindical/CCT → Sindicatos para cadastrar.</p>
+              )}
             </div>
-            <div>
-              <label className="label">Última CCT (ano)</label>
-              <input className="input" type="number" value={sindical.ultimaCct} onChange={e => setSind('ultimaCct',Number(e.target.value))} placeholder="Ex: 2026" />
-            </div>
-            <div className="col-span-2">
-              <div onClick={() => setSind('reajusteAplicado', !sindical.reajusteAplicado)}
-                className="flex items-center justify-between p-3 bg-surface2 rounded-lg cursor-pointer select-none hover:bg-border transition-colors">
-                <span className="text-sm font-medium text-ink">Reajuste já aplicado?</span>
-                <div className={`w-9 h-5 rounded-full relative transition-colors ${sindical.reajusteAplicado?'bg-ink':'bg-border2'}`}>
-                  <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${sindical.reajusteAplicado?'translate-x-4':'translate-x-0.5'}`} style={{boxShadow:'0 1px 3px rgba(0,0,0,.2)'}} />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Última CCT (ano)</label>
+                <input className="input" type="number" value={sindical.ultimaCct}
+                  onChange={e => setSind('ultimaCct', Number(e.target.value))} placeholder="Ex: 2026" />
+              </div>
+              <div>
+                <div onClick={() => setSind('reajusteAplicado', !sindical.reajusteAplicado)}
+                  className="flex items-center justify-between p-3 bg-surface2 rounded-lg cursor-pointer select-none hover:bg-border transition-colors mt-5">
+                  <span className="text-sm font-medium text-ink">Reajuste já aplicado?</span>
+                  <div className={`w-9 h-5 rounded-full relative transition-colors ${sindical.reajusteAplicado?'bg-ink':'bg-border2'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${sindical.reajusteAplicado?'translate-x-4':'translate-x-0.5'}`} style={{boxShadow:'0 1px 3px rgba(0,0,0,.2)'}} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -195,7 +211,6 @@ export default function EmpresaForm() {
           </button>
           <button type="button" onClick={() => navigate('/empresas')} className="btn btn-secondary">Cancelar</button>
         </div>
-
       </form>
     </div>
   );
