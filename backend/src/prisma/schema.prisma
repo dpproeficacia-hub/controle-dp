@@ -62,6 +62,7 @@ model Usuario {
   criadoEm   DateTime    @default(now())
   empresas   Empresa[]   @relation("ResponsavelEmpresa")
   historicos HistoricoMensal[]
+  eventos    EventoAgenda[]
 }
 
 model Empresa {
@@ -88,6 +89,7 @@ model Empresa {
   historicos       HistoricoMensal[]
   sindical         ControleSindical?
   gruposTarefa     GrupoTarefa[]
+  eventos          EventoAgenda[]
 }
 
 model Filial {
@@ -200,4 +202,20 @@ model EntregaSubtarefa {
   valor          Decimal?     @db.Decimal(12,2)
 
   @@unique([subtarefaId, entregaGrupoId])
+}
+
+model EventoAgenda {
+  id           String    @id @default(cuid())
+  titulo       String
+  descricao    String?
+  dataInicio   DateTime
+  dataLimite   DateTime?
+  concluido    Boolean   @default(false)
+  dataConclusao DateTime?
+  usuarioId    String
+  usuario      Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresaId    String?
+  empresa      Empresa?  @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  criadoEm     DateTime  @default(now())
+  atualizadoEm DateTime  @updatedAt
 }
