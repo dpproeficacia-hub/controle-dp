@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import SinoNotificacoes from './SinoNotificacoes';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -63,16 +64,17 @@ export default function Layout() {
           <NI to="/dashboard">Dashboard</NI>
           <NI to="/mensal">Controle Mensal</NI>
           <NI to="/empresas">Empresas</NI>
+
           <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
           <NI to="/sindical">Sindical / CCT</NI>
+          <NI to="/agenda">Agenda</NI>
           {isGestor && <NI to="/responsaveis">Responsáveis</NI>}
-          {isGestor && <NI to="/tarefas">Tarefas Extras</NI>}
-          <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Relatórios</p>
-          <NI to="/relatorio">Relatórios</NI>
+
           {isAdmin && (
             <>
               <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
               <NI to="/identidade">Identidade Visual</NI>
+              <NI to="/importacao">Importar Empresas</NI>
             </>
           )}
         </nav>
@@ -97,22 +99,15 @@ export default function Layout() {
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-surface border-b border-border h-14 flex items-center px-6 gap-4 flex-shrink-0">
-          <div className="flex items-center gap-1.5 bg-surface2 border border-border rounded-lg px-3 py-1.5">
-            <button onClick={() => mudarMes(-1)}
-              className="w-6 h-6 flex items-center justify-center text-muted hover:text-ink transition-colors font-bold">
-              ‹
-            </button>
-            <span className="text-sm font-semibold text-ink min-w-[120px] text-center">
-              {MESES[mes]} {ano}
-            </span>
-            <button onClick={() => mudarMes(1)}
-              className="w-6 h-6 flex items-center justify-center text-muted hover:text-ink transition-colors font-bold">
-              ›
-            </button>
-          </div>
           <div className="flex-1" />
+          <div className="flex items-center gap-2">
+            <button onClick={()=>mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
+            <span className="text-sm font-semibold text-ink min-w-[110px] text-center">{MESES[mes]} / {ano}</span>
+            <button onClick={()=>mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
+          </div>
+          <SinoNotificacoes />
           {isGestor && (
-            <button onClick={() => navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
+            <button onClick={()=>navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
               style={{background: id.corPrimaria}}>
               <span className="text-base leading-none">+</span> Nova Empresa
             </button>
