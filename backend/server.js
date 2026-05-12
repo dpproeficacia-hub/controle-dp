@@ -10,6 +10,7 @@ const sindicalRoutes = require('./src/routes/sindical');
 const responsaveisRoutes = require('./src/routes/responsaveis');
 const dashboardRoutes = require('./src/routes/dashboard');
 const gruposRoutes = require('./src/routes/grupos');
+const agendaRoutes = require('./src/routes/agenda');
 
 const app = express();
 const prisma = new PrismaClient();
@@ -45,6 +46,7 @@ app.use('/api/sindical', sindicalRoutes);
 app.use('/api/responsaveis', responsaveisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/grupos', gruposRoutes);
+app.use('/api/agenda', agendaRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
