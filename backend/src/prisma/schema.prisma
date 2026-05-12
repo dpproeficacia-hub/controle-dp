@@ -65,6 +65,16 @@ model Usuario {
   eventos    EventoAgenda[]
 }
 
+model Sindicato {
+  id           String             @id @default(cuid())
+  nome         String             @unique
+  dataBase     String
+  observacoes  String?
+  ativo        Boolean            @default(true)
+  criadoEm     DateTime           @default(now())
+  controles    ControleSindical[]
+}
+
 model Empresa {
   id               String            @id @default(cuid())
   razaoSocial      String
@@ -142,14 +152,14 @@ model HistoricoFilial {
 }
 
 model ControleSindical {
-  id               String   @id @default(cuid())
-  empresaId        String   @unique
-  empresa          Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  sindicato        String
-  dataBase         String
+  id               String    @id @default(cuid())
+  empresaId        String    @unique
+  empresa          Empresa   @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sindicatoId      String?
+  sindicato        Sindicato? @relation(fields: [sindicatoId], references: [id], onDelete: SetNull)
   ultimaCct        Int
-  reajusteAplicado Boolean  @default(false)
-  atualizadoEm     DateTime @updatedAt
+  reajusteAplicado Boolean   @default(false)
+  atualizadoEm     DateTime  @updatedAt
 }
 
 model GrupoTarefa {
@@ -183,39 +193,4 @@ model EntregaGrupo {
   grupoId      String
   grupo        GrupoTarefa     @relation(fields: [grupoId], references: [id], onDelete: Cascade)
   historicoId  String
-  historico    HistoricoMensal @relation(fields: [historicoId], references: [id], onDelete: Cascade)
-  entregue     Boolean         @default(false)
-  dataEntrega  DateTime?
-  subtarefas   EntregaSubtarefa[]
-  criadoEm     DateTime        @default(now())
-
-  @@unique([grupoId, historicoId])
-}
-
-model EntregaSubtarefa {
-  id             String       @id @default(cuid())
-  subtarefaId    String
-  subtarefa      Subtarefa    @relation(fields: [subtarefaId], references: [id], onDelete: Cascade)
-  entregaGrupoId String
-  entregaGrupo   EntregaGrupo @relation(fields: [entregaGrupoId], references: [id], onDelete: Cascade)
-  ok             Boolean      @default(false)
-  valor          Decimal?     @db.Decimal(12,2)
-
-  @@unique([subtarefaId, entregaGrupoId])
-}
-
-model EventoAgenda {
-  id           String    @id @default(cuid())
-  titulo       String
-  descricao    String?
-  dataInicio   DateTime
-  dataLimite   DateTime?
-  concluido    Boolean   @default(false)
-  dataConclusao DateTime?
-  usuarioId    String
-  usuario      Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  empresaId    String?
-  empresa      Empresa?  @relation(fields: [empresaId], references: [id], onDelete: SetNull)
-  criadoEm     DateTime  @default(now())
-  atualizadoEm DateTime  @updatedAt
-}
+  historico    HistoricoM
