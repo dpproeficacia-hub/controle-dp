@@ -127,13 +127,29 @@ router.patch('/:id/saiu', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-router.delete('/:id', requireNivel('ADMIN'), async (req, res) => {
+router.delete('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     await prisma.empresa.update({
       where: { id: req.params.id },
       data: { ativa: false }
     });
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+router.post('/excluir-lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma empresa selecionada.' });
+    }
+    await prisma.empresa.updateMany({
+      where: { id: { in: ids } },
+      data: { ativa: false }
+    });
+    res.json({ ok: true, total: ids.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
