@@ -163,17 +163,18 @@ model ControleSindical {
 }
 
 model GrupoTarefa {
-  id            String       @id @default(cuid())
-  empresaId     String
-  empresa       Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
-  nome          String
-  diaVencimento Int
-  tipo          TipoTarefa   @default(RECORRENTE)
-  ativo         Boolean      @default(true)
-  ordem         Int          @default(0)
-  criadoEm      DateTime     @default(now())
-  subtarefas    Subtarefa[]
-  entregas      EntregaGrupo[]
+  id               String       @id @default(cuid())
+  empresaId        String
+  empresa          Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nome             String
+  diaVencimento    Int
+  tipo             TipoTarefa   @default(RECORRENTE)
+  ativo            Boolean      @default(true)
+  ordem            Int          @default(0)
+  inicioCobrancaEm DateTime?
+  criadoEm         DateTime     @default(now())
+  subtarefas       Subtarefa[]
+  entregas         EntregaGrupo[]
 }
 
 model Subtarefa {
