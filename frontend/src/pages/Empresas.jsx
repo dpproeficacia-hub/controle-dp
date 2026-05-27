@@ -207,12 +207,25 @@ export default function Empresas() {
                     </td>
                   )}
                   <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <div>
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <p className="text-sm font-semibold text-ink">{emp.razaoSocial}</p>
-                        <p className="text-xs text-faint font-mono">{fmtCNPJ(emp.cnpj)}</p>
+                        {emp.saiuDoEscritorio && (
+                          <span className="pill pill-amber text-[10px]">Saiu</span>
+                        )}
+                        {emp.temFilial && emp.filiaisVinculadas?.length > 0 && (
+                          <span className="pill pill-blue text-[10px]">
+                            Matriz · {emp.filiaisVinculadas.length} filial(is)
+                          </span>
+                        )}
                       </div>
-                      {emp.saiuDoEscritorio && <span className="pill pill-amber text-[10px]">Saiu</span>}
+                      <p className="text-xs text-faint font-mono">{fmtCNPJ(emp.cnpj)}</p>
+                      {/* Badge de filial — aparece quando a empresa tem matriz vinculada */}
+                      {emp.matriz && (
+                        <p className="text-[11px] text-blue-600 font-medium mt-0.5">
+                          ↳ Filial de {emp.matriz.razaoSocial}
+                        </p>
+                      )}
                     </div>
                   </td>
                   <td className="px-4 py-3">
