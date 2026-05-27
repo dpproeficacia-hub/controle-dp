@@ -32,6 +32,8 @@ router.get('/', async (req, res) => {
         responsavel: { select: { id: true, nome: true } },
         sindical: true,
         filiais: true,
+        matriz: { select: { id: true, razaoSocial: true } },
+        filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       },
       orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
     });
@@ -49,6 +51,8 @@ router.get('/:id', async (req, res) => {
         responsavel: { select: { id: true, nome: true } },
         sindical: true,
         filiais: true,
+        matriz: { select: { id: true, razaoSocial: true } },
+        filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       }
     });
     if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
@@ -62,7 +66,8 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { razaoSocial, cnpj, enquadramento, tipo, nivel, prazoEntrega,
             temFuncionarios, temProLabore, semMovimento, temFilial,
-            fatorR, enviaReinf, observacoes, responsavelId } = req.body;
+            fatorR, enviaReinf, observacoes, responsavelId,
+            matrizId, filiaisIds } = req.body;
     const cnpjLimpo = cnpj ? cnpj.replace(/\D/g, '') : '';
     const prazo = prazoEntrega === '' || prazoEntrega === null || prazoEntrega === undefined
       ? null : Number(prazoEntrega) || null;
@@ -78,12 +83,24 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         enviaReinf: enviaReinf || false,
         observacoes: observacoes || null,
         responsavelId: responsavelId || null,
+        matrizId: matrizId || null,
       },
       include: {
         responsavel: { select: { id: true, nome: true } },
-        sindical: true, filiais: true
+        sindical: true, filiais: true,
+        matriz: { select: { id: true, razaoSocial: true } },
+        filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       }
     });
+
+    // Vincula as filiais selecionadas a esta empresa como matriz
+    if (Array.isArray(filiaisIds) && filiaisIds.length > 0) {
+      await prisma.empresa.updateMany({
+        where: { id: { in: filiaisIds } },
+        data: { matrizId: empresa.id, temFilial: false }
+      });
+    }
+
     res.status(201).json(empresa);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -92,7 +109,7 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
 
 router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
-    const { sindical, filiais, ...dados } = req.body;
+    const { sindical, filiais, filiaisIds, ...dados } = req.body;
     if (dados.cnpj) dados.cnpj = dados.cnpj.replace(/\D/g, '');
     if (dados.prazoEntrega === '' || dados.prazoEntrega === null || dados.prazoEntrega === undefined) {
       dados.prazoEntrega = null;
@@ -100,14 +117,35 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       dados.prazoEntrega = Number(dados.prazoEntrega) || null;
     }
     if (dados.responsavelId === '') dados.responsavelId = null;
+    if (dados.matrizId === '') dados.matrizId = null;
+
     const empresa = await prisma.empresa.update({
       where: { id: req.params.id },
       data: dados,
       include: {
         responsavel: { select: { id: true, nome: true } },
-        sindical: true, filiais: true
+        sindical: true, filiais: true,
+        matriz: { select: { id: true, razaoSocial: true } },
+        filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       }
     });
+
+    // Atualiza filiais vinculadas: desvincula as que saíram, vincula as novas
+    if (Array.isArray(filiaisIds)) {
+      // Remove vínculo das que não estão mais na lista
+      await prisma.empresa.updateMany({
+        where: { matrizId: req.params.id, id: { notIn: filiaisIds } },
+        data: { matrizId: null }
+      });
+      // Vincula as selecionadas
+      if (filiaisIds.length > 0) {
+        await prisma.empresa.updateMany({
+          where: { id: { in: filiaisIds } },
+          data: { matrizId: req.params.id, temFilial: false }
+        });
+      }
+    }
+
     res.json(empresa);
   } catch (e) {
     res.status(500).json({ error: e.message });
