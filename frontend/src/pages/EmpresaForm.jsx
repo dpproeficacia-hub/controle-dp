@@ -22,6 +22,8 @@ export default function EmpresaForm() {
     sindicatoId:'', ultimaCct: new Date().getFullYear(), reajusteAplicado:false
   });
 
+  const [filiaisIds, setFiliaisIds] = useState([]);
+  const [todasEmpresas, setTodasEmpresas] = useState([]);
   const [sindicatos, setSindicatos] = useState([]);
   const [responsaveis, setResponsaveis] = useState([]);
   const [salvando, setSalvando] = useState(false);
@@ -30,6 +32,7 @@ export default function EmpresaForm() {
   useEffect(() => {
     api.get('/responsaveis').then(r => setResponsaveis(r.data));
     api.get('/sindical/sindicatos').then(r => setSindicatos(r.data));
+    api.get('/empresas').then(r => setTodasEmpresas(r.data));
     if (isEdicao) {
       api.get(`/empresas/${id}`).then(r => {
         const d = r.data;
@@ -48,6 +51,10 @@ export default function EmpresaForm() {
             reajusteAplicado: d.sindical.reajusteAplicado || false
           });
         }
+        // Pré-seleciona filiais já vinculadas
+        if (d.filiaisVinculadas) {
+          setFiliaisIds(d.filiaisVinculadas.map(f => f.id));
+        }
       });
     }
   }, [id]);
@@ -57,15 +64,30 @@ export default function EmpresaForm() {
 
   const sindicatoSelecionado = sindicatos.find(s => s.id === sindical.sindicatoId);
 
+  function toggleFilial(empresaId) {
+    setFiliaisIds(ids =>
+      ids.includes(empresaId) ? ids.filter(x => x !== empresaId) : [...ids, empresaId]
+    );
+  }
+
+  // Empresas disponíveis para ser filial: todas exceto a própria empresa editada
+  // e exceto as que já são matrizes de outras (temFilial=true com filiaisVinculadas)
+  const empresasDisponiveis = todasEmpresas.filter(emp => {
+    if (emp.id === id) return false; // não pode ser filial de si mesma
+    if (emp.matrizId && emp.matrizId !== id) return false; // já é filial de outra matriz
+    return true;
+  });
+
   async function salvar(e) {
     e.preventDefault();
     setSalvando(true); setErro('');
     try {
       let empresaId = id;
+      const payload = { ...form, filiaisIds: form.temFilial ? filiaisIds : [] };
       if (isEdicao) {
-        await api.put(`/empresas/${id}`, form);
+        await api.put(`/empresas/${id}`, payload);
       } else {
-        const { data } = await api.post('/empresas', form);
+        const { data } = await api.post('/empresas', payload);
         empresaId = data.id;
       }
       if (sindical.sindicatoId) {
@@ -143,13 +165,59 @@ export default function EmpresaForm() {
 
         <div className="card">
           <div className="card-header"><span className="card-title">Configurações operacionais</span></div>
-          <div className="p-5 grid grid-cols-2 gap-3">
-            <Toggle campo="temFuncionarios" label="Tem funcionários?" />
-            <Toggle campo="temProLabore" label="Tem pró-labore?" />
-            <Toggle campo="semMovimento" label="Empresa sem movimento?" />
-            <Toggle campo="enviaReinf" label="Envia REINF?" />
-            <Toggle campo="fatorR" label="Empresa fator R?" />
-            <Toggle campo="temFilial" label="Possui filial?" />
+          <div className="p-5 space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Toggle campo="temFuncionarios" label="Tem funcionários?" />
+              <Toggle campo="temProLabore" label="Tem pró-labore?" />
+              <Toggle campo="semMovimento" label="Empresa sem movimento?" />
+              <Toggle campo="enviaReinf" label="Envia REINF?" />
+              <Toggle campo="fatorR" label="Empresa fator R?" />
+              <Toggle campo="temFilial" label="Possui filial?" />
+            </div>
+
+            {/* Seleção de filiais — aparece quando temFilial está ativo */}
+            {form.temFilial && (
+              <div className="mt-1">
+                <label className="label mb-2">
+                  Selecionar empresas filiais
+                  <span className="text-faint font-normal ml-1">(empresas que pertencem a esta matriz)</span>
+                </label>
+                {empresasDisponiveis.length === 0 ? (
+                  <p className="text-xs text-faint p-3 bg-surface2 rounded-lg border border-border">
+                    Nenhuma outra empresa disponível para vincular como filial.
+                  </p>
+                ) : (
+                  <div className="border border-border rounded-lg max-h-52 overflow-y-auto">
+                    {empresasDisponiveis.map(emp => (
+                      <label key={emp.id}
+                        className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface2 cursor-pointer border-b border-border last:border-b-0">
+                        <div
+                          onClick={() => toggleFilial(emp.id)}
+                          className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${filiaisIds.includes(emp.id) ? 'bg-ink border-ink' : 'border-border2'}`}>
+                          {filiaisIds.includes(emp.id) && (
+                            <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                              <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-ink font-medium truncate">{emp.razaoSocial}</p>
+                          <p className="text-xs text-faint font-mono">{emp.cnpj?.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}</p>
+                        </div>
+                        {emp.matrizId === id && (
+                          <span className="text-[10px] text-blue-600 font-semibold">já vinculada</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {filiaisIds.length > 0 && (
+                  <p className="text-xs text-muted mt-1.5">
+                    {filiaisIds.length} filial(is) selecionada(s)
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
