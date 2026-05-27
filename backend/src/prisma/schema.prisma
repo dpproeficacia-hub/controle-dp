@@ -53,14 +53,14 @@ enum TipoTarefa {
 }
 
 model Usuario {
-  id         String       @id @default(cuid())
+  id         String          @id @default(cuid())
   nome       String
-  email      String       @unique
+  email      String          @unique
   senha      String
-  nivel      NivelAcesso  @default(OPERADOR)
-  ativo      Boolean      @default(true)
-  criadoEm   DateTime     @default(now())
-  empresas   Empresa[]    @relation("ResponsavelEmpresa")
+  nivel      NivelAcesso     @default(OPERADOR)
+  ativo      Boolean         @default(true)
+  criadoEm   DateTime        @default(now())
+  empresas   Empresa[]       @relation("ResponsavelEmpresa")
   historicos HistoricoMensal[]
   eventos    EventoAgenda[]
 }
@@ -95,6 +95,9 @@ model Empresa {
   criadaEm         DateTime          @default(now())
   responsavelId    String?
   responsavel      Usuario?          @relation("ResponsavelEmpresa", fields: [responsavelId], references: [id])
+  matrizId         String?
+  matriz           Empresa?          @relation("MatrizFiliais", fields: [matrizId], references: [id])
+  filiaisVinculadas Empresa[]        @relation("MatrizFiliais")
   filiais          Filial[]
   historicos       HistoricoMensal[]
   sindical         ControleSindical?
