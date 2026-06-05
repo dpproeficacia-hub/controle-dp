@@ -5,32 +5,48 @@ import { useAuth } from '../contexts/AuthContext';
 
 const ENQUADRAMENTOS_VALIDOS = [
   'SIMPLES_NACIONAL', 'LUCRO_PRESUMIDO', 'LUCRO_REAL',
-  'MEI', 'CEI', 'DOMESTICA', 'PRODUTOR_RURAL', 'PESSOA_FISICA'
+  'MEI', 'CEI', 'DOMESTICA', 'PRODUTOR_RURAL', 'PESSOA_FISICA', 'ENTIDADES'
 ];
 
 function normalizarEnquadramento(valor) {
   if (!valor) return 'SIMPLES_NACIONAL';
   const v = String(valor).trim().toUpperCase()
-    .replace(/\s+/g, '_')
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
+    .replace(/\s+/g, '_');                             // espaço → underline
+
   if (ENQUADRAMENTOS_VALIDOS.includes(v)) return v;
-  if (v.includes('PRESUMIDO')) return 'LUCRO_PRESUMIDO';
-  if (v.includes('REAL')) return 'LUCRO_REAL';
-  if (v.includes('SIMPLES')) return 'SIMPLES_NACIONAL';
-  if (v === 'MEI') return 'MEI';
-  if (v === 'CEI') return 'CEI';
-  if (v.includes('DOMESTICA') || v.includes('DOMESTIC')) return 'DOMESTICA';
-  if (v.includes('RURAL')) return 'PRODUTOR_RURAL';
-  if (v.includes('FISICA') || v.includes('FISICA')) return 'PESSOA_FISICA';
-  return 'SIMPLES_NACIONAL';
+
+  // Correspondências parciais — aceita variações livres
+  if (v.includes('PRESUMIDO'))  return 'LUCRO_PRESUMIDO';
+  if (v.includes('REAL'))       return 'LUCRO_REAL';
+  if (v.includes('SIMPLES'))    return 'SIMPLES_NACIONAL';
+  if (v === 'MEI')              return 'MEI';
+  if (v === 'CEI')              return 'CEI';
+  if (v.includes('DOMESTIC'))   return 'DOMESTICA';
+  if (v.includes('RURAL'))      return 'PRODUTOR_RURAL';
+  if (v.includes('FISICA') || v.includes('FISICO')) return 'PESSOA_FISICA';
+  if (v.includes('ENTIDADE') || v.includes('ASSOCIA') || v.includes('INSTITU') || v.includes('FUNDAC')) return 'ENTIDADES';
+
+  return 'SIMPLES_NACIONAL'; // padrão
 }
 
 function detectarTipoDocumento(doc) {
-  const nums = doc.replace(/\D/g, '');
+  // Garante que o doc é tratado como string e preserva zeros à esquerda
+  const nums = String(doc).replace(/\D/g, '').padStart(
+    String(doc).replace(/\D/g, '').length, '0'
+  );
   if (nums.length === 11) return 'CPF';
-  if (nums.length === 12) return 'CEI'; // CEI e CNO têm 12 dígitos — usa CEI como padrão
+  if (nums.length === 12) return 'CEI';
   if (nums.length === 14) return 'CNPJ';
   return 'CNPJ';
+}
+
+function normalizarDoc(doc) {
+  // Converte número ou string, preserva zeros à esquerda para CPF
+  const s = String(doc).replace(/\D/g, '');
+  // CPF sempre tem 11 dígitos — padeia à esquerda com zero se necessário
+  if (s.length === 10) return s.padStart(11, '0');
+  return s;
 }
 
 const PILL_ENQ = {
@@ -42,6 +58,7 @@ const PILL_ENQ = {
   DOMESTICA:        'bg-pink-100 text-pink-800',
   PRODUTOR_RURAL:   'bg-lime-100 text-lime-800',
   PESSOA_FISICA:    'bg-gray-100 text-gray-800',
+  ENTIDADES:        'bg-indigo-100 text-indigo-800',
 };
 
 const LABEL_ENQ = {
@@ -53,6 +70,7 @@ const LABEL_ENQ = {
   DOMESTICA:        'Doméstica',
   PRODUTOR_RURAL:   'Produtor Rural',
   PESSOA_FISICA:    'Pessoa Física',
+  ENTIDADES:        'Entidades',
 };
 
 export default function Importacao() {
@@ -74,26 +92,31 @@ export default function Importacao() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        const wb = XLSX.read(ev.target.result, { type: 'binary' });
+        // raw: true preserva o valor original das células (evita conversão numérica)
+        const wb = XLSX.read(ev.target.result, { type: 'binary', raw: false });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        // cellText: true pega o texto formatado, não o número bruto
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
 
         const empresas = [];
         for (const row of rows) {
           const razao = String(row[0] || '').trim();
           const docRaw = String(row[1] || '').trim();
-          const docNums = docRaw.replace(/\D/g, '');
           const enquadramentoRaw = row[2];
 
-          if (!razao || docNums.length < 11) continue;
+          if (!razao || !docRaw) continue;
           if (razao.toLowerCase().includes('razão') || razao.toLowerCase().includes('razao')) continue;
           if (razao.toLowerCase().includes('exemplo') || razao.toLowerCase().includes('modelo')) continue;
+          if (razao.startsWith('Preencha') || razao.startsWith('🟡') || razao.startsWith('  ')) continue;
 
-          const tipoDocumento = detectarTipoDocumento(docRaw);
+          const docNormalizado = normalizarDoc(docRaw);
+          if (docNormalizado.length < 11) continue;
+
+          const tipoDocumento = detectarTipoDocumento(docNormalizado);
 
           empresas.push({
             razaoSocial: razao,
-            cnpj: docNums,
+            cnpj: docNormalizado,
             tipoDocumento,
             enquadramento: normalizarEnquadramento(enquadramentoRaw),
             enquadramentoOriginal: enquadramentoRaw ? String(enquadramentoRaw).trim() : '',
@@ -278,11 +301,12 @@ export default function Importacao() {
         <div className="card p-5">
           <p className="card-title mb-3">Como usar</p>
           <div className="space-y-2 text-sm text-muted">
-            <p>1. Coluna A: <strong className="text-ink">Razão Social / Nome</strong> (obrigatório)</p>
-            <p>2. Coluna B: <strong className="text-ink">Documento</strong> — CNPJ (14 dígitos), CPF (11), CEI/CNO (12) — com ou sem pontuação</p>
-            <p>3. Coluna C: <strong className="text-ink">Enquadramento</strong> (opcional)</p>
-            <p className="text-xs text-faint pl-3">Valores aceitos: SIMPLES_NACIONAL · LUCRO_PRESUMIDO · LUCRO_REAL · MEI · CEI · DOMESTICA · PRODUTOR_RURAL · PESSOA_FISICA</p>
-            <p className="text-xs text-faint pl-3">Se deixar em branco, importa como Simples Nacional</p>
+            <p>1. Coluna A: <strong className="text-ink">Razão Social / Nome</strong></p>
+            <p>2. Coluna B: <strong className="text-ink">Documento</strong> — CNPJ (14 dígitos), CPF (11), CEI/CNO (12)</p>
+            <p className="text-xs text-amber-700 pl-3 bg-amber-50 py-1.5 rounded">
+              ⚠️ CPFs com zero à esquerda: formate a coluna B como <strong>Texto</strong> antes de digitar
+            </p>
+            <p>3. Coluna C: <strong className="text-ink">Enquadramento</strong> (opcional — aceita com ou sem underline)</p>
           </div>
         </div>
       </div>
