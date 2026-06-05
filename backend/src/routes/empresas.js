@@ -64,17 +64,27 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
-    const { razaoSocial, cnpj, enquadramento, tipo, nivel, prazoEntrega,
-            temFuncionarios, temProLabore, semMovimento, temFilial,
-            fatorR, enviaReinf, observacoes, responsavelId,
-            matrizId, filiaisIds } = req.body;
-    const cnpjLimpo = cnpj ? cnpj.replace(/\D/g, '') : '';
+    const {
+      razaoSocial, cnpj, tipoDocumento, enquadramento, tipo, nivel, prazoEntrega,
+      temFuncionarios, temProLabore, semMovimento, temFilial,
+      fatorR, enviaReinf, observacoes, responsavelId,
+      matrizId, filiaisIds
+    } = req.body;
+
+    // Remove qualquer caractere não numérico do documento
+    const docLimpo = cnpj ? cnpj.replace(/\D/g, '') : '';
     const prazo = prazoEntrega === '' || prazoEntrega === null || prazoEntrega === undefined
       ? null : Number(prazoEntrega) || null;
+
     const empresa = await prisma.empresa.create({
       data: {
-        razaoSocial, cnpj: cnpjLimpo, enquadramento, tipo,
-        nivel: nivel || 'N3', prazoEntrega: prazo,
+        razaoSocial,
+        cnpj: docLimpo,
+        tipoDocumento: tipoDocumento || 'CNPJ',
+        enquadramento,
+        tipo,
+        nivel: nivel || 'N3',
+        prazoEntrega: prazo,
         temFuncionarios: temFuncionarios || false,
         temProLabore: temProLabore || false,
         semMovimento: semMovimento || false,
@@ -93,7 +103,6 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       }
     });
 
-    // Vincula as filiais selecionadas a esta empresa como matriz
     if (Array.isArray(filiaisIds) && filiaisIds.length > 0) {
       await prisma.empresa.updateMany({
         where: { id: { in: filiaisIds } },
@@ -130,14 +139,11 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       }
     });
 
-    // Atualiza filiais vinculadas: desvincula as que saíram, vincula as novas
     if (Array.isArray(filiaisIds)) {
-      // Remove vínculo das que não estão mais na lista
       await prisma.empresa.updateMany({
         where: { matrizId: req.params.id, id: { notIn: filiaisIds } },
         data: { matrizId: null }
       });
-      // Vincula as selecionadas
       if (filiaisIds.length > 0) {
         await prisma.empresa.updateMany({
           where: { id: { in: filiaisIds } },
