@@ -22,6 +22,7 @@ enum Enquadramento {
   DOMESTICA
   PRODUTOR_RURAL
   PESSOA_FISICA
+  ENTIDADES
 }
 
 enum AnexoSimples {
