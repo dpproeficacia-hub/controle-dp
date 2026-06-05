@@ -3,7 +3,10 @@ import * as XLSX from 'xlsx';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
-const ENQUADRAMENTOS_VALIDOS = ['SIMPLES_NACIONAL', 'LUCRO_PRESUMIDO', 'LUCRO_REAL'];
+const ENQUADRAMENTOS_VALIDOS = [
+  'SIMPLES_NACIONAL', 'LUCRO_PRESUMIDO', 'LUCRO_REAL',
+  'MEI', 'CEI', 'DOMESTICA', 'PRODUTOR_RURAL', 'PESSOA_FISICA'
+];
 
 function normalizarEnquadramento(valor) {
   if (!valor) return 'SIMPLES_NACIONAL';
@@ -11,12 +14,46 @@ function normalizarEnquadramento(valor) {
     .replace(/\s+/g, '_')
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
   if (ENQUADRAMENTOS_VALIDOS.includes(v)) return v;
-  // Tentativa de correspondência parcial
   if (v.includes('PRESUMIDO')) return 'LUCRO_PRESUMIDO';
   if (v.includes('REAL')) return 'LUCRO_REAL';
   if (v.includes('SIMPLES')) return 'SIMPLES_NACIONAL';
-  return 'SIMPLES_NACIONAL'; // padrão
+  if (v === 'MEI') return 'MEI';
+  if (v === 'CEI') return 'CEI';
+  if (v.includes('DOMESTICA') || v.includes('DOMESTIC')) return 'DOMESTICA';
+  if (v.includes('RURAL')) return 'PRODUTOR_RURAL';
+  if (v.includes('FISICA') || v.includes('FISICA')) return 'PESSOA_FISICA';
+  return 'SIMPLES_NACIONAL';
 }
+
+function detectarTipoDocumento(doc) {
+  const nums = doc.replace(/\D/g, '');
+  if (nums.length === 11) return 'CPF';
+  if (nums.length === 12) return 'CEI'; // CEI e CNO têm 12 dígitos — usa CEI como padrão
+  if (nums.length === 14) return 'CNPJ';
+  return 'CNPJ';
+}
+
+const PILL_ENQ = {
+  SIMPLES_NACIONAL: 'bg-green-100 text-green-800',
+  LUCRO_PRESUMIDO:  'bg-blue-100 text-blue-800',
+  LUCRO_REAL:       'bg-purple-100 text-purple-800',
+  MEI:              'bg-teal-100 text-teal-800',
+  CEI:              'bg-orange-100 text-orange-800',
+  DOMESTICA:        'bg-pink-100 text-pink-800',
+  PRODUTOR_RURAL:   'bg-lime-100 text-lime-800',
+  PESSOA_FISICA:    'bg-gray-100 text-gray-800',
+};
+
+const LABEL_ENQ = {
+  SIMPLES_NACIONAL: 'Simples Nacional',
+  LUCRO_PRESUMIDO:  'Lucro Presumido',
+  LUCRO_REAL:       'Lucro Real',
+  MEI:              'MEI',
+  CEI:              'CEI',
+  DOMESTICA:        'Doméstica',
+  PRODUTOR_RURAL:   'Produtor Rural',
+  PESSOA_FISICA:    'Pessoa Física',
+};
 
 export default function Importacao() {
   const { isAdmin } = useAuth();
@@ -44,19 +81,20 @@ export default function Importacao() {
         const empresas = [];
         for (const row of rows) {
           const razao = String(row[0] || '').trim();
-          const cnpjRaw = String(row[1] || '').trim();
-          const cnpj = cnpjRaw.replace(/\D/g, '');
+          const docRaw = String(row[1] || '').trim();
+          const docNums = docRaw.replace(/\D/g, '');
           const enquadramentoRaw = row[2];
 
-          // Ignora linhas sem razão social e CNPJ válido
-          if (!razao || cnpj.length !== 14) continue;
-          // Ignora linhas de cabeçalho ou exemplo
+          if (!razao || docNums.length < 11) continue;
           if (razao.toLowerCase().includes('razão') || razao.toLowerCase().includes('razao')) continue;
           if (razao.toLowerCase().includes('exemplo') || razao.toLowerCase().includes('modelo')) continue;
 
+          const tipoDocumento = detectarTipoDocumento(docRaw);
+
           empresas.push({
             razaoSocial: razao,
-            cnpj,
+            cnpj: docNums,
+            tipoDocumento,
             enquadramento: normalizarEnquadramento(enquadramentoRaw),
             enquadramentoOriginal: enquadramentoRaw ? String(enquadramentoRaw).trim() : '',
           });
@@ -87,6 +125,7 @@ export default function Importacao() {
         await api.post('/empresas', {
           razaoSocial: emp.razaoSocial,
           cnpj: emp.cnpj,
+          tipoDocumento: emp.tipoDocumento,
           enquadramento: emp.enquadramento,
           tipo: 'OUTROS',
           nivel: 'N3',
@@ -114,12 +153,6 @@ export default function Importacao() {
     setImportando(false);
   }
 
-  const PILL_ENQ = {
-    SIMPLES_NACIONAL: 'bg-green-100 text-green-800',
-    LUCRO_PRESUMIDO: 'bg-blue-100 text-blue-800',
-    LUCRO_REAL: 'bg-purple-100 text-purple-800',
-  };
-
   if (!isAdmin) return (
     <div className="flex items-center justify-center h-48 text-muted text-sm">
       Acesso restrito ao administrador.
@@ -142,7 +175,7 @@ export default function Importacao() {
                 {arquivo ? arquivo.name : 'Clique para selecionar o arquivo'}
               </p>
               <p className="text-xs text-faint mt-1">
-                {arquivo ? `${preview.length} empresas encontradas` : 'Formato aceito: .xlsx'}
+                {arquivo ? `${preview.length} registros encontrados` : 'Formato aceito: .xlsx'}
               </p>
             </div>
             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={processarArquivo} />
@@ -153,30 +186,31 @@ export default function Importacao() {
         {preview.length > 0 && !resultado && (
           <div className="card overflow-hidden">
             <div className="card-header">
-              <span className="card-title">2. Prévia — {preview.length} empresas</span>
+              <span className="card-title">2. Prévia — {preview.length} registros</span>
               <span className="pill pill-blue">{preview.length} para importar</span>
             </div>
             <div className="max-h-64 overflow-y-auto">
               <table className="w-full">
                 <thead className="bg-surface2 sticky top-0">
                   <tr>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">#</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Razão Social</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">CNPJ</th>
-                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Enquadramento</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">#</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Nome / Razão Social</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Documento</th>
+                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Enquadramento</th>
                   </tr>
                 </thead>
                 <tbody>
                   {preview.map((emp, i) => (
                     <tr key={i} className="border-b border-border last:border-b-0 hover:bg-surface2">
-                      <td className="px-4 py-2 text-xs text-faint">{i + 1}</td>
-                      <td className="px-4 py-2 text-xs font-medium text-ink">{emp.razaoSocial}</td>
-                      <td className="px-4 py-2 text-xs font-mono text-muted">
-                        {emp.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}
+                      <td className="px-3 py-2 text-xs text-faint">{i + 1}</td>
+                      <td className="px-3 py-2 text-xs font-medium text-ink">{emp.razaoSocial}</td>
+                      <td className="px-3 py-2">
+                        <span className="text-[10px] font-semibold text-faint mr-1">{emp.tipoDocumento}</span>
+                        <span className="text-xs font-mono text-muted">{emp.cnpj}</span>
                       </td>
-                      <td className="px-4 py-2">
+                      <td className="px-3 py-2">
                         <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${PILL_ENQ[emp.enquadramento]}`}>
-                          {emp.enquadramento.replace(/_/g, ' ')}
+                          {LABEL_ENQ[emp.enquadramento]}
                         </span>
                         {!emp.enquadramentoOriginal && (
                           <span className="text-[10px] text-faint ml-1">(padrão)</span>
@@ -192,7 +226,7 @@ export default function Importacao() {
               <button onClick={importar} disabled={importando} className="btn btn-primary">
                 {importando
                   ? <><span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin mr-2" />Importando...</>
-                  : `Importar ${preview.length} empresas`}
+                  : `Importar ${preview.length} registros`}
               </button>
             </div>
           </div>
@@ -201,7 +235,7 @@ export default function Importacao() {
         {importando && (
           <div className="card p-5">
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-ink">Importando empresas...</span>
+              <span className="text-sm font-medium text-ink">Importando...</span>
               <span className="text-sm font-bold text-ink">{progresso}%</span>
             </div>
             <div className="progress-bar h-3">
@@ -219,7 +253,7 @@ export default function Importacao() {
             <div className="grid grid-cols-2 gap-3 mb-4">
               <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-center">
                 <p className="font-display font-bold text-2xl text-green-700">{resultado.criadas}</p>
-                <p className="text-xs text-green-600 mt-1">Empresas criadas</p>
+                <p className="text-xs text-green-600 mt-1">Criados com sucesso</p>
               </div>
               <div className="bg-surface2 border border-border rounded-lg p-3 text-center">
                 <p className="font-display font-bold text-2xl text-muted">{resultado.ignoradas}</p>
@@ -234,7 +268,8 @@ export default function Importacao() {
                 ))}
               </div>
             )}
-            <button onClick={() => { setArquivo(null); setPreview([]); setResultado(null); }} className="btn btn-secondary text-xs">
+            <button onClick={() => { setArquivo(null); setPreview([]); setResultado(null); }}
+              className="btn btn-secondary text-xs">
               Importar outro arquivo
             </button>
           </div>
@@ -243,13 +278,11 @@ export default function Importacao() {
         <div className="card p-5">
           <p className="card-title mb-3">Como usar</p>
           <div className="space-y-2 text-sm text-muted">
-            <p>1. Baixe o modelo acima e preencha a partir da linha 13</p>
-            <p>2. Coluna A: <strong className="text-ink">Razão Social</strong> (obrigatório)</p>
-            <p>3. Coluna B: <strong className="text-ink">CNPJ</strong> (obrigatório, com ou sem pontuação)</p>
-            <p>4. Coluna C: <strong className="text-ink">Enquadramento</strong> (opcional — use o menu suspenso na planilha)</p>
-            <p className="text-xs text-faint pl-3">Se deixar em branco, importa como <strong>Simples Nacional</strong></p>
-            <p>5. Selecione o arquivo — o sistema mostra a prévia antes de importar</p>
-            <p>6. Após importar, configure cada empresa individualmente</p>
+            <p>1. Coluna A: <strong className="text-ink">Razão Social / Nome</strong> (obrigatório)</p>
+            <p>2. Coluna B: <strong className="text-ink">Documento</strong> — CNPJ (14 dígitos), CPF (11), CEI/CNO (12) — com ou sem pontuação</p>
+            <p>3. Coluna C: <strong className="text-ink">Enquadramento</strong> (opcional)</p>
+            <p className="text-xs text-faint pl-3">Valores aceitos: SIMPLES_NACIONAL · LUCRO_PRESUMIDO · LUCRO_REAL · MEI · CEI · DOMESTICA · PRODUTOR_RURAL · PESSOA_FISICA</p>
+            <p className="text-xs text-faint pl-3">Se deixar em branco, importa como Simples Nacional</p>
           </div>
         </div>
       </div>
