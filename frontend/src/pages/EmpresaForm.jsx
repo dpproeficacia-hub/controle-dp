@@ -312,3 +312,91 @@ export default function EmpresaForm() {
                               <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
                             </svg>
                           )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-ink font-medium truncate">{emp.razaoSocial}</p>
+                          <p className="text-xs text-faint font-mono">{emp.cnpj}</p>
+                        </div>
+                        {emp.matrizId === id && (
+                          <span className="text-[10px] text-blue-600 font-semibold">já vinculada</span>
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {filiaisIds.length > 0 && (
+                  <p className="text-xs text-muted mt-1.5">{filiaisIds.length} filial(is) selecionada(s)</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><span className="card-title">Controle Sindical / CCT</span></div>
+          <div className="p-5 space-y-4">
+            <div>
+              <label className="label">Sindicato</label>
+              <select className="select" value={sindical.sindicatoId}
+                onChange={e => setSind('sindicatoId', e.target.value)}>
+                <option value="">Sem sindicato vinculado</option>
+                {sindicatos.map(s => (
+                  <option key={s.id} value={s.id}>{s.nome}</option>
+                ))}
+              </select>
+              {sindicatoSelecionado && (
+                <p className="text-xs text-muted mt-1">
+                  Data-base: <span className="font-medium text-ink">{sindicatoSelecionado.dataBase}</span>
+                  {sindicatoSelecionado.observacoes && <span className="ml-2 text-faint">· {sindicatoSelecionado.observacoes}</span>}
+                </p>
+              )}
+              {sindicatos.length === 0 && (
+                <p className="text-xs text-amber-600 mt-1">Nenhum sindicato cadastrado. Acesse Sindical/CCT → Sindicatos para cadastrar.</p>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="label">Última CCT (ano)</label>
+                <input className="input" type="number" value={sindical.ultimaCct}
+                  onChange={e => setSind('ultimaCct', Number(e.target.value))}
+                  placeholder="Ex: 2026" />
+              </div>
+              <div>
+                <div onClick={() => setSind('reajusteAplicado', !sindical.reajusteAplicado)}
+                  className="flex items-center justify-between p-3 bg-surface2 rounded-lg cursor-pointer select-none hover:bg-border transition-colors mt-5">
+                  <span className="text-sm font-medium text-ink">Reajuste já aplicado?</span>
+                  <div className={`w-9 h-5 rounded-full relative transition-colors ${sindical.reajusteAplicado ? 'bg-ink' : 'bg-border2'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${sindical.reajusteAplicado ? 'translate-x-4' : 'translate-x-0.5'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-header"><span className="card-title">Observações / Particularidades</span></div>
+          <div className="p-5">
+            <textarea className="input h-20 resize-y py-2 leading-relaxed"
+              value={form.observacoes}
+              onChange={e => set('observacoes', e.target.value)}
+              placeholder="Ex: cliente envia ponto atrasado · empresa possui comissão variável..." />
+          </div>
+        </div>
+
+        {erro && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{erro}</div>
+        )}
+
+        <div className="flex gap-3">
+          <button type="submit" disabled={salvando} className="btn btn-primary">
+            {salvando
+              ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+              : isEdicao ? 'Salvar alterações' : 'Cadastrar empresa'}
+          </button>
+          <button type="button" onClick={() => navigate('/empresas')} className="btn btn-secondary">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  );
+}
