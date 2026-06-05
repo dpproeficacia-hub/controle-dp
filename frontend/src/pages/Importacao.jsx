@@ -11,12 +11,9 @@ const ENQUADRAMENTOS_VALIDOS = [
 function normalizarEnquadramento(valor) {
   if (!valor) return 'SIMPLES_NACIONAL';
   const v = String(valor).trim().toUpperCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // remove acentos
-    .replace(/\s+/g, '_');                             // espaço → underline
-
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, '_');
   if (ENQUADRAMENTOS_VALIDOS.includes(v)) return v;
-
-  // Correspondências parciais — aceita variações livres
   if (v.includes('PRESUMIDO'))  return 'LUCRO_PRESUMIDO';
   if (v.includes('REAL'))       return 'LUCRO_REAL';
   if (v.includes('SIMPLES'))    return 'SIMPLES_NACIONAL';
@@ -26,27 +23,39 @@ function normalizarEnquadramento(valor) {
   if (v.includes('RURAL'))      return 'PRODUTOR_RURAL';
   if (v.includes('FISICA') || v.includes('FISICO')) return 'PESSOA_FISICA';
   if (v.includes('ENTIDADE') || v.includes('ASSOCIA') || v.includes('INSTITU') || v.includes('FUNDAC')) return 'ENTIDADES';
-
-  return 'SIMPLES_NACIONAL'; // padrão
+  return 'SIMPLES_NACIONAL';
 }
 
-function detectarTipoDocumento(doc) {
-  // Garante que o doc é tratado como string e preserva zeros à esquerda
-  const nums = String(doc).replace(/\D/g, '').padStart(
-    String(doc).replace(/\D/g, '').length, '0'
-  );
-  if (nums.length === 11) return 'CPF';
-  if (nums.length === 12) return 'CEI';
-  if (nums.length === 14) return 'CNPJ';
+function normalizarDoc(raw) {
+  if (raw === null || raw === undefined || raw === '') return '';
+
+  let s = String(raw).trim();
+
+  // Se o Excel converteu para notação científica (ex: 5.47219e+10), converte de volta
+  if (/e\+/i.test(s)) {
+    try {
+      // Usa BigInt para não perder precisão
+      s = BigInt(Math.round(Number(s))).toString();
+    } catch {
+      s = Math.round(Number(s)).toString();
+    }
+  }
+
+  // Remove qualquer coisa que não seja dígito
+  const digits = s.replace(/\D/g, '');
+
+  // Padding para casos onde o zero à esquerda foi cortado
+  if (digits.length === 10) return digits.padStart(11, '0'); // CPF perdeu 1 zero
+  if (digits.length === 13) return digits.padStart(14, '0'); // CNPJ perdeu 1 zero
+
+  return digits;
+}
+
+function detectarTipoDocumento(digits) {
+  if (digits.length === 11) return 'CPF';
+  if (digits.length === 12) return 'CEI';
+  if (digits.length === 14) return 'CNPJ';
   return 'CNPJ';
-}
-
-function normalizarDoc(doc) {
-  // Converte número ou string, preserva zeros à esquerda para CPF
-  const s = String(doc).replace(/\D/g, '');
-  // CPF sempre tem 11 dígitos — padeia à esquerda com zero se necessário
-  if (s.length === 10) return s.padStart(11, '0');
-  return s;
 }
 
 const PILL_ENQ = {
@@ -80,7 +89,7 @@ export default function Importacao() {
   const [importando, setImportando] = useState(false);
   const [resultado, setResultado] = useState(null);
   const [erro, setErro] = useState('');
-  const [progresso, setProgresso] = useState(0);
+  const [progresso, setProgresso] = useState(false);
 
   function processarArquivo(e) {
     const file = e.target.files[0];
@@ -92,22 +101,36 @@ export default function Importacao() {
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        // raw: true preserva o valor original das células (evita conversão numérica)
-        const wb = XLSX.read(ev.target.result, { type: 'binary', raw: false });
+        const wb = XLSX.read(ev.target.result, {
+          type: 'binary',
+          cellText: true,   // lê o texto formatado
+          cellDates: false,
+          raw: false        // não converte para número nativo
+        });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        // cellText: true pega o texto formatado, não o número bruto
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+
+        // sheet_to_json com raw:false garante que tudo vem como string
+        const rows = XLSX.utils.sheet_to_json(ws, {
+          header: 1,
+          defval: '',
+          raw: false  // CRÍTICO: mantém números como string, preserva zeros
+        });
 
         const empresas = [];
         for (const row of rows) {
           const razao = String(row[0] || '').trim();
-          const docRaw = String(row[1] || '').trim();
+          const docRaw = row[1];
           const enquadramentoRaw = row[2];
 
           if (!razao || !docRaw) continue;
-          if (razao.toLowerCase().includes('razão') || razao.toLowerCase().includes('razao')) continue;
-          if (razao.toLowerCase().includes('exemplo') || razao.toLowerCase().includes('modelo')) continue;
-          if (razao.startsWith('Preencha') || razao.startsWith('🟡') || razao.startsWith('  ')) continue;
+
+          // Filtra linhas de cabeçalho e instrução
+          const razaoLower = razao.toLowerCase();
+          if (
+            razaoLower.includes('razão') || razaoLower.includes('razao') ||
+            razaoLower.includes('exemplo') || razaoLower.includes('modelo') ||
+            razaoLower.startsWith('preencha') || razaoLower.startsWith('  ')
+          ) continue;
 
           const docNormalizado = normalizarDoc(docRaw);
           if (docNormalizado.length < 11) continue;
@@ -115,7 +138,7 @@ export default function Importacao() {
           const tipoDocumento = detectarTipoDocumento(docNormalizado);
 
           empresas.push({
-            razaoSocial: razao,
+            razaoSocial: razao.trim(),
             cnpj: docNormalizado,
             tipoDocumento,
             enquadramento: normalizarEnquadramento(enquadramentoRaw),
@@ -124,8 +147,11 @@ export default function Importacao() {
         }
 
         setPreview(empresas);
-      } catch {
-        setErro('Erro ao ler o arquivo. Verifique se é um .xlsx válido.');
+        if (empresas.length === 0) {
+          setErro('Nenhuma empresa válida encontrada. Verifique se os dados estão a partir da linha 16.');
+        }
+      } catch (err) {
+        setErro('Erro ao ler o arquivo: ' + err.message);
       }
     };
     reader.readAsBinaryString(file);
@@ -162,7 +188,7 @@ export default function Importacao() {
         criadas++;
       } catch (e) {
         const msg = e.response?.data?.error || e.message;
-        if (msg.includes('Unique') || msg.includes('already')) {
+        if (msg.includes('Unique') || msg.includes('already') || msg.includes('unique')) {
           ignoradas++;
         } else {
           erros.push({ empresa: emp.razaoSocial, erro: msg });
@@ -216,10 +242,9 @@ export default function Importacao() {
               <table className="w-full">
                 <thead className="bg-surface2 sticky top-0">
                   <tr>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">#</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Nome / Razão Social</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Documento</th>
-                    <th className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Enquadramento</th>
+                    {['#', 'Nome / Razão Social', 'Documento', 'Enquadramento'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
@@ -303,10 +328,12 @@ export default function Importacao() {
           <div className="space-y-2 text-sm text-muted">
             <p>1. Coluna A: <strong className="text-ink">Razão Social / Nome</strong></p>
             <p>2. Coluna B: <strong className="text-ink">Documento</strong> — CNPJ (14 dígitos), CPF (11), CEI/CNO (12)</p>
-            <p className="text-xs text-amber-700 pl-3 bg-amber-50 py-1.5 rounded">
-              ⚠️ CPFs com zero à esquerda: formate a coluna B como <strong>Texto</strong> antes de digitar
-            </p>
-            <p>3. Coluna C: <strong className="text-ink">Enquadramento</strong> (opcional — aceita com ou sem underline)</p>
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              <p className="text-xs text-amber-700">
+                ⚠️ Se colar dados de outra planilha, formate a coluna B como <strong>Texto</strong> antes de colar — assim zeros à esquerda de CPF são preservados.
+              </p>
+            </div>
+            <p>3. Coluna C: <strong className="text-ink">Enquadramento</strong> — opcional, aceita com ou sem acento</p>
           </div>
         </div>
       </div>
