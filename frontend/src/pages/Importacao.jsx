@@ -3,6 +3,21 @@ import * as XLSX from 'xlsx';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
+const ENQUADRAMENTOS_VALIDOS = ['SIMPLES_NACIONAL', 'LUCRO_PRESUMIDO', 'LUCRO_REAL'];
+
+function normalizarEnquadramento(valor) {
+  if (!valor) return 'SIMPLES_NACIONAL';
+  const v = String(valor).trim().toUpperCase()
+    .replace(/\s+/g, '_')
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  if (ENQUADRAMENTOS_VALIDOS.includes(v)) return v;
+  // Tentativa de correspondência parcial
+  if (v.includes('PRESUMIDO')) return 'LUCRO_PRESUMIDO';
+  if (v.includes('REAL')) return 'LUCRO_REAL';
+  if (v.includes('SIMPLES')) return 'SIMPLES_NACIONAL';
+  return 'SIMPLES_NACIONAL'; // padrão
+}
+
 export default function Importacao() {
   const { isAdmin } = useAuth();
   const [arquivo, setArquivo] = useState(null);
@@ -31,9 +46,20 @@ export default function Importacao() {
           const razao = String(row[0] || '').trim();
           const cnpjRaw = String(row[1] || '').trim();
           const cnpj = cnpjRaw.replace(/\D/g, '');
-          if (razao && cnpj && cnpj.length === 14) {
-            empresas.push({ razaoSocial: razao, cnpj });
-          }
+          const enquadramentoRaw = row[2];
+
+          // Ignora linhas sem razão social e CNPJ válido
+          if (!razao || cnpj.length !== 14) continue;
+          // Ignora linhas de cabeçalho ou exemplo
+          if (razao.toLowerCase().includes('razão') || razao.toLowerCase().includes('razao')) continue;
+          if (razao.toLowerCase().includes('exemplo') || razao.toLowerCase().includes('modelo')) continue;
+
+          empresas.push({
+            razaoSocial: razao,
+            cnpj,
+            enquadramento: normalizarEnquadramento(enquadramentoRaw),
+            enquadramentoOriginal: enquadramentoRaw ? String(enquadramentoRaw).trim() : '',
+          });
         }
 
         setPreview(empresas);
@@ -61,7 +87,7 @@ export default function Importacao() {
         await api.post('/empresas', {
           razaoSocial: emp.razaoSocial,
           cnpj: emp.cnpj,
-          enquadramento: 'SIMPLES_NACIONAL',
+          enquadramento: emp.enquadramento,
           tipo: 'OUTROS',
           nivel: 'N3',
           temFuncionarios: false,
@@ -88,6 +114,12 @@ export default function Importacao() {
     setImportando(false);
   }
 
+  const PILL_ENQ = {
+    SIMPLES_NACIONAL: 'bg-green-100 text-green-800',
+    LUCRO_PRESUMIDO: 'bg-blue-100 text-blue-800',
+    LUCRO_REAL: 'bg-purple-100 text-purple-800',
+  };
+
   if (!isAdmin) return (
     <div className="flex items-center justify-center h-48 text-muted text-sm">
       Acesso restrito ao administrador.
@@ -110,7 +142,7 @@ export default function Importacao() {
                 {arquivo ? arquivo.name : 'Clique para selecionar o arquivo'}
               </p>
               <p className="text-xs text-faint mt-1">
-                {arquivo ? `${preview.length} empresas encontradas` : 'Formato aceito: .xlsx com colunas Razão Social e CNPJ'}
+                {arquivo ? `${preview.length} empresas encontradas` : 'Formato aceito: .xlsx'}
               </p>
             </div>
             <input type="file" accept=".xlsx,.xls" className="hidden" onChange={processarArquivo} />
@@ -131,6 +163,7 @@ export default function Importacao() {
                     <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">#</th>
                     <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Razão Social</th>
                     <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">CNPJ</th>
+                    <th className="px-4 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">Enquadramento</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -141,13 +174,21 @@ export default function Importacao() {
                       <td className="px-4 py-2 text-xs font-mono text-muted">
                         {emp.cnpj.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}
                       </td>
+                      <td className="px-4 py-2">
+                        <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${PILL_ENQ[emp.enquadramento]}`}>
+                          {emp.enquadramento.replace(/_/g, ' ')}
+                        </span>
+                        {!emp.enquadramentoOriginal && (
+                          <span className="text-[10px] text-faint ml-1">(padrão)</span>
+                        )}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
             <div className="p-4 border-t border-border flex items-center justify-between bg-surface2">
-              <p className="text-xs text-faint">Todas como Simples Nacional · Tipo: Outros · Nível N3</p>
+              <p className="text-xs text-faint">Tipo: Outros · Nível N3 · demais campos editáveis depois</p>
               <button onClick={importar} disabled={importando} className="btn btn-primary">
                 {importando
                   ? <><span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin mr-2" />Importando...</>
@@ -185,6 +226,14 @@ export default function Importacao() {
                 <p className="text-xs text-faint mt-1">Já existiam ou com erro</p>
               </div>
             </div>
+            {resultado.erros.length > 0 && (
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <p className="text-xs font-semibold text-red-700 mb-1">Erros:</p>
+                {resultado.erros.map((e, i) => (
+                  <p key={i} className="text-xs text-red-600">{e.empresa}: {e.erro}</p>
+                ))}
+              </div>
+            )}
             <button onClick={() => { setArquivo(null); setPreview([]); setResultado(null); }} className="btn btn-secondary text-xs">
               Importar outro arquivo
             </button>
@@ -194,10 +243,13 @@ export default function Importacao() {
         <div className="card p-5">
           <p className="card-title mb-3">Como usar</p>
           <div className="space-y-2 text-sm text-muted">
-            <p>1. O arquivo deve ter duas colunas: <strong className="text-ink">Razão Social</strong> e <strong className="text-ink">CNPJ</strong></p>
-            <p>2. Selecione o arquivo — o sistema mostra a prévia antes de importar</p>
-            <p>3. Confirme e clique em <strong className="text-ink">Importar</strong></p>
-            <p>4. Após importar, configure cada empresa individualmente</p>
+            <p>1. Baixe o modelo acima e preencha a partir da linha 13</p>
+            <p>2. Coluna A: <strong className="text-ink">Razão Social</strong> (obrigatório)</p>
+            <p>3. Coluna B: <strong className="text-ink">CNPJ</strong> (obrigatório, com ou sem pontuação)</p>
+            <p>4. Coluna C: <strong className="text-ink">Enquadramento</strong> (opcional — use o menu suspenso na planilha)</p>
+            <p className="text-xs text-faint pl-3">Se deixar em branco, importa como <strong>Simples Nacional</strong></p>
+            <p>5. Selecione o arquivo — o sistema mostra a prévia antes de importar</p>
+            <p>6. Após importar, configure cada empresa individualmente</p>
           </div>
         </div>
       </div>
