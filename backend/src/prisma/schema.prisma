@@ -17,6 +17,18 @@ enum Enquadramento {
   SIMPLES_NACIONAL
   LUCRO_PRESUMIDO
   LUCRO_REAL
+  MEI
+  CEI
+  DOMESTICA
+  PRODUTOR_RURAL
+  PESSOA_FISICA
+}
+
+enum TipoDocumento {
+  CNPJ
+  CPF
+  CEI
+  CNO
 }
 
 enum TipoEmpresa {
@@ -63,6 +75,17 @@ model Usuario {
   empresas   Empresa[]       @relation("ResponsavelEmpresa")
   historicos HistoricoMensal[]
   eventos    EventoAgenda[]
+  resets     ResetSenha[]
+}
+
+model ResetSenha {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  codigo    String
+  usado     Boolean  @default(false)
+  expiraEm  DateTime
+  criadoEm  DateTime @default(now())
 }
 
 model Sindicato {
@@ -76,33 +99,34 @@ model Sindicato {
 }
 
 model Empresa {
-  id               String            @id @default(cuid())
-  razaoSocial      String
-  cnpj             String            @unique
-  enquadramento    Enquadramento
-  tipo             TipoEmpresa
-  nivel            NivelComplexidade @default(N3)
-  prazoEntrega     Int?
-  temFuncionarios  Boolean           @default(false)
-  temProLabore     Boolean           @default(false)
-  semMovimento     Boolean           @default(false)
-  temFilial        Boolean           @default(false)
-  fatorR           Boolean           @default(false)
-  enviaReinf       Boolean           @default(false)
-  observacoes      String?
-  ativa            Boolean           @default(true)
-  saiuDoEscritorio Boolean           @default(false)
-  criadaEm         DateTime          @default(now())
-  responsavelId    String?
-  responsavel      Usuario?          @relation("ResponsavelEmpresa", fields: [responsavelId], references: [id])
-  matrizId         String?
-  matriz           Empresa?          @relation("MatrizFiliais", fields: [matrizId], references: [id])
-  filiaisVinculadas Empresa[]        @relation("MatrizFiliais")
-  filiais          Filial[]
-  historicos       HistoricoMensal[]
-  sindical         ControleSindical?
-  gruposTarefa     GrupoTarefa[]
-  eventos          EventoAgenda[]
+  id                String            @id @default(cuid())
+  razaoSocial       String
+  cnpj              String            @unique
+  tipoDocumento     TipoDocumento     @default(CNPJ)
+  enquadramento     Enquadramento
+  tipo              TipoEmpresa
+  nivel             NivelComplexidade @default(N3)
+  prazoEntrega      Int?
+  temFuncionarios   Boolean           @default(false)
+  temProLabore      Boolean           @default(false)
+  semMovimento      Boolean           @default(false)
+  temFilial         Boolean           @default(false)
+  fatorR            Boolean           @default(false)
+  enviaReinf        Boolean           @default(false)
+  observacoes       String?
+  ativa             Boolean           @default(true)
+  saiuDoEscritorio  Boolean           @default(false)
+  criadaEm          DateTime          @default(now())
+  responsavelId     String?
+  responsavel       Usuario?          @relation("ResponsavelEmpresa", fields: [responsavelId], references: [id])
+  matrizId          String?
+  matriz            Empresa?          @relation("MatrizFiliais", fields: [matrizId], references: [id])
+  filiaisVinculadas Empresa[]         @relation("MatrizFiliais")
+  filiais           Filial[]
+  historicos        HistoricoMensal[]
+  sindical          ControleSindical?
+  gruposTarefa      GrupoTarefa[]
+  eventos           EventoAgenda[]
 }
 
 model Filial {
@@ -181,15 +205,15 @@ model GrupoTarefa {
 }
 
 model Subtarefa {
-  id       String      @id @default(cuid())
-  grupoId  String
-  grupo    GrupoTarefa @relation(fields: [grupoId], references: [id], onDelete: Cascade)
-  nome     String
-  temValor Boolean     @default(false)
-  ordem    Int         @default(0)
-  ativa    Boolean     @default(true)
-  criadoEm DateTime    @default(now())
-  entregas EntregaSubtarefa[]
+  id        String      @id @default(cuid())
+  grupoId   String
+  grupo     GrupoTarefa @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  nome      String
+  temValor  Boolean     @default(false)
+  ordem     Int         @default(0)
+  ativa     Boolean     @default(true)
+  criadoEm  DateTime    @default(now())
+  entregas  EntregaSubtarefa[]
 }
 
 model EntregaGrupo {
