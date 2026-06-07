@@ -1,3 +1,112 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum NivelAcesso {
+  OPERADOR
+  GESTOR
+  ADMIN
+}
+
+enum Enquadramento {
+  SIMPLES_NACIONAL
+  LUCRO_PRESUMIDO
+  LUCRO_REAL
+  MEI
+  CEI
+  DOMESTICA
+  PRODUTOR_RURAL
+  PESSOA_FISICA
+  ENTIDADES
+}
+
+enum AnexoSimples {
+  ANEXO_I
+  ANEXO_II
+  ANEXO_III
+  ANEXO_IV
+  ANEXO_V
+}
+
+enum TipoDocumento {
+  CNPJ
+  CPF
+  CEI
+  CNO
+}
+
+enum TipoEmpresa {
+  COMERCIO
+  INDUSTRIA
+  SERVICOS
+  ADVOCACIA
+  CLINICA
+  HOLDING
+  CONSTRUCAO_CIVIL
+  RURAL
+  DOMESTICO
+  TRANSPORTES
+  OUTROS
+}
+
+enum NivelComplexidade {
+  N1
+  N2
+  N3
+  N4
+  N5
+}
+
+enum StatusMensal {
+  NAO_INICIADO
+  PARCIAL
+  FINALIZADO
+}
+
+enum TipoTarefa {
+  RECORRENTE
+  PONTUAL
+}
+
+model Usuario {
+  id         String          @id @default(cuid())
+  nome       String
+  email      String          @unique
+  senha      String
+  nivel      NivelAcesso     @default(OPERADOR)
+  ativo      Boolean         @default(true)
+  criadoEm   DateTime        @default(now())
+  empresas   Empresa[]       @relation("ResponsavelEmpresa")
+  historicos HistoricoMensal[]
+  eventos    EventoAgenda[]
+  resets     ResetSenha[]
+}
+
+model ResetSenha {
+  id        String   @id @default(cuid())
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  codigo    String
+  usado     Boolean  @default(false)
+  expiraEm  DateTime
+  criadoEm  DateTime @default(now())
+}
+
+model Sindicato {
+  id          String             @id @default(cuid())
+  nome        String             @unique
+  dataBase    String
+  observacoes String?
+  ativo       Boolean            @default(true)
+  criadoEm    DateTime           @default(now())
+  controles   ControleSindical[]
+}
+
 model Empresa {
   id                String            @id @default(cuid())
   razaoSocial       String
@@ -29,4 +138,134 @@ model Empresa {
   sindical          ControleSindical?
   gruposTarefa      GrupoTarefa[]
   eventos           EventoAgenda[]
+}
+
+model Filial {
+  id         String  @id @default(cuid())
+  nome       String
+  cnpj       String?
+  empresaId  String
+  empresa    Empresa @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  historicos HistoricoFilial[]
+}
+
+model HistoricoMensal {
+  id               String       @id @default(cuid())
+  empresaId        String
+  empresa          Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  competencia      String
+  status           StatusMensal @default(NAO_INICIADO)
+  folhaOk          Boolean      @default(false)
+  inssOk           Boolean      @default(false)
+  fgtsOk           Boolean      @default(false)
+  irOk             Boolean      @default(false)
+  proLaboreOk      Boolean      @default(false)
+  semMovimentoOk   Boolean      @default(false)
+  valorInss        Decimal?     @db.Decimal(12,2)
+  valorFgts        Decimal?     @db.Decimal(12,2)
+  valorIr          Decimal?     @db.Decimal(12,2)
+  dataEntregaFolha DateTime?
+  dataEntregaObrig DateTime?
+  responsavelId    String?
+  responsavel      Usuario?     @relation(fields: [responsavelId], references: [id])
+  filiais          HistoricoFilial[]
+  entregasGrupo    EntregaGrupo[]
+  criadoEm         DateTime     @default(now())
+  atualizadoEm     DateTime     @updatedAt
+
+  @@unique([empresaId, competencia])
+}
+
+model HistoricoFilial {
+  id          String          @id @default(cuid())
+  filialId    String
+  filial      Filial          @relation(fields: [filialId], references: [id], onDelete: Cascade)
+  historicoId String
+  historico   HistoricoMensal @relation(fields: [historicoId], references: [id], onDelete: Cascade)
+  valorInss   Decimal?        @db.Decimal(12,2)
+  valorFgts   Decimal?        @db.Decimal(12,2)
+  valorIr     Decimal?        @db.Decimal(12,2)
+
+  @@unique([filialId, historicoId])
+}
+
+model ControleSindical {
+  id               String     @id @default(cuid())
+  empresaId        String     @unique
+  empresa          Empresa    @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sindicatoId      String?
+  sindicato        Sindicato? @relation(fields: [sindicatoId], references: [id], onDelete: SetNull)
+  ultimaCct        Int
+  reajusteAplicado Boolean    @default(false)
+  atualizadoEm     DateTime   @updatedAt
+}
+
+model GrupoTarefa {
+  id               String       @id @default(cuid())
+  empresaId        String
+  empresa          Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nome             String
+  diaVencimento    Int
+  tipo             TipoTarefa   @default(RECORRENTE)
+  ativo            Boolean      @default(true)
+  ordem            Int          @default(0)
+  inicioCobrancaEm DateTime?
+  criadoEm         DateTime     @default(now())
+  subtarefas       Subtarefa[]
+  entregas         EntregaGrupo[]
+}
+
+model Subtarefa {
+  id        String      @id @default(cuid())
+  grupoId   String
+  grupo     GrupoTarefa @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  nome      String
+  temValor  Boolean     @default(false)
+  ordem     Int         @default(0)
+  ativa     Boolean     @default(true)
+  criadoEm  DateTime    @default(now())
+  entregas  EntregaSubtarefa[]
+}
+
+model EntregaGrupo {
+  id          String          @id @default(cuid())
+  grupoId     String
+  grupo       GrupoTarefa     @relation(fields: [grupoId], references: [id], onDelete: Cascade)
+  historicoId String
+  historico   HistoricoMensal @relation(fields: [historicoId], references: [id], onDelete: Cascade)
+  entregue    Boolean         @default(false)
+  dispensada  Boolean         @default(false)
+  dataEntrega DateTime?
+  subtarefas  EntregaSubtarefa[]
+  criadoEm    DateTime        @default(now())
+
+  @@unique([grupoId, historicoId])
+}
+
+model EntregaSubtarefa {
+  id             String       @id @default(cuid())
+  subtarefaId    String
+  subtarefa      Subtarefa    @relation(fields: [subtarefaId], references: [id], onDelete: Cascade)
+  entregaGrupoId String
+  entregaGrupo   EntregaGrupo @relation(fields: [entregaGrupoId], references: [id], onDelete: Cascade)
+  ok             Boolean      @default(false)
+  valor          Decimal?     @db.Decimal(12,2)
+
+  @@unique([subtarefaId, entregaGrupoId])
+}
+
+model EventoAgenda {
+  id            String    @id @default(cuid())
+  titulo        String
+  descricao     String?
+  dataInicio    DateTime
+  dataLimite    DateTime?
+  concluido     Boolean   @default(false)
+  dataConclusao DateTime?
+  usuarioId     String
+  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  empresaId     String?
+  empresa       Empresa?  @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  criadoEm      DateTime  @default(now())
+  atualizadoEm  DateTime  @updatedAt
 }
