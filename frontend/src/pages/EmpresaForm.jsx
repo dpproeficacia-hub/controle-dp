@@ -56,7 +56,8 @@ export default function EmpresaForm() {
     enquadramento: 'SIMPLES_NACIONAL', anexoSimples: 'ANEXO_III',
     tipo: 'COMERCIO', nivel: 'N3', prazoEntrega: '', responsavelId: '',
     temFuncionarios: false, temProLabore: false, semMovimento: false,
-    temFilial: false, fatorR: false, enviaReinf: false, observacoes: ''
+    temFilial: false, fatorR: false, enviaReinf: false,
+    participaTarefas: true, observacoes: ''
   });
 
   const [sindical, setSindical] = useState({
@@ -79,8 +80,7 @@ export default function EmpresaForm() {
 
   useEffect(() => {
     if (!isEdicao) return;
-    setSalvoOk(false);
-    setErro('');
+    setSalvoOk(false); setErro('');
     api.get(`/empresas/${id}`).then(r => {
       const d = r.data;
       setForm({
@@ -99,6 +99,7 @@ export default function EmpresaForm() {
         temFilial: d.temFilial,
         fatorR: d.fatorR,
         enviaReinf: d.enviaReinf,
+        participaTarefas: d.participaTarefas !== false,
         observacoes: d.observacoes || ''
       });
       if (d.sindical) {
@@ -187,12 +188,16 @@ export default function EmpresaForm() {
     return true;
   });
 
-  const Toggle = ({ campo, label }) => (
+  const Toggle = ({ campo, label, descricao }) => (
     <div onClick={() => set(campo, !form[campo])}
       className="flex items-center justify-between p-3 bg-surface2 rounded-lg cursor-pointer select-none hover:bg-border transition-colors">
-      <span className="text-sm font-medium text-ink">{label}</span>
-      <div className={`w-9 h-5 rounded-full relative transition-colors ${form[campo] ? 'bg-ink' : 'bg-border2'}`}>
-        <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${form[campo] ? 'translate-x-4' : 'translate-x-0.5'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+      <div>
+        <span className="text-sm font-medium text-ink">{label}</span>
+        {descricao && <p className="text-xs text-faint mt-0.5">{descricao}</p>}
+      </div>
+      <div className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ml-3 ${form[campo] ? 'bg-ink' : 'bg-border2'}`}>
+        <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${form[campo] ? 'translate-x-4' : 'translate-x-0.5'}`}
+          style={{ boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
       </div>
     </div>
   );
@@ -213,16 +218,14 @@ export default function EmpresaForm() {
           {/* Navegação entre empresas */}
           {listaIds.length > 1 && (
             <div className="flex items-center gap-1 bg-surface2 border border-border rounded-lg px-2 py-1">
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => idAnterior && irParaEmpresa(idAnterior)}
                 disabled={!idAnterior}
                 className="text-xs px-2 py-1 rounded hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-medium text-muted">
                 ← Anterior
               </button>
               <span className="text-xs text-faint px-1">{idxAtual + 1} / {listaIds.length}</span>
-              <button
-                type="button"
+              <button type="button"
                 onClick={() => idProximo && irParaEmpresa(idProximo)}
                 disabled={!idProximo}
                 className="text-xs px-2 py-1 rounded hover:bg-border disabled:opacity-30 disabled:cursor-not-allowed transition-colors font-medium text-muted">
@@ -233,10 +236,7 @@ export default function EmpresaForm() {
 
           {/* Salvar fixo no topo */}
           {isEdicao && (
-            <button
-              type="button"
-              onClick={salvar}
-              disabled={salvando}
+            <button type="button" onClick={salvar} disabled={salvando}
               className={`btn text-sm px-4 py-2 transition-all ${salvoOk ? 'bg-green-600 text-white border-green-600' : 'btn-primary'}`}>
               {salvando
                 ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
@@ -329,7 +329,9 @@ export default function EmpresaForm() {
               <select className="select" value={form.nivel}
                 onChange={e => set('nivel', e.target.value)}>
                 {NIVEIS.map(n => (
-                  <option key={n} value={n}>{n} — {n === 'N1' ? 'Mais complexo' : n === 'N5' ? 'Menos complexo' : 'Intermediário'}</option>
+                  <option key={n} value={n}>
+                    {n} — {n === 'N1' ? 'Mais complexo' : n === 'N5' ? 'Menos complexo' : 'Intermediário'}
+                  </option>
                 ))}
               </select>
             </div>
@@ -356,6 +358,11 @@ export default function EmpresaForm() {
               <Toggle campo="fatorR" label="Empresa fator R?" />
               <Toggle campo="temFilial" label="Possui filial?" />
             </div>
+
+            <Toggle
+              campo="participaTarefas"
+              label="Participa do controle de tarefas?"
+              descricao="Desative para empresas sem obrigações mensais a entregar" />
 
             {form.temFilial && (
               <div className="mt-1">
@@ -415,11 +422,15 @@ export default function EmpresaForm() {
               {sindicatoSelecionado && (
                 <p className="text-xs text-muted mt-1">
                   Data-base: <span className="font-medium text-ink">{sindicatoSelecionado.dataBase}</span>
-                  {sindicatoSelecionado.observacoes && <span className="ml-2 text-faint">· {sindicatoSelecionado.observacoes}</span>}
+                  {sindicatoSelecionado.observacoes && (
+                    <span className="ml-2 text-faint">· {sindicatoSelecionado.observacoes}</span>
+                  )}
                 </p>
               )}
               {sindicatos.length === 0 && (
-                <p className="text-xs text-amber-600 mt-1">Nenhum sindicato cadastrado. Acesse Sindical/CCT → Sindicatos para cadastrar.</p>
+                <p className="text-xs text-amber-600 mt-1">
+                  Nenhum sindicato cadastrado. Acesse Sindical/CCT → Sindicatos para cadastrar.
+                </p>
               )}
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -434,7 +445,8 @@ export default function EmpresaForm() {
                   className="flex items-center justify-between p-3 bg-surface2 rounded-lg cursor-pointer select-none hover:bg-border transition-colors mt-5">
                   <span className="text-sm font-medium text-ink">Reajuste já aplicado?</span>
                   <div className={`w-9 h-5 rounded-full relative transition-colors ${sindical.reajusteAplicado ? 'bg-ink' : 'bg-border2'}`}>
-                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${sindical.reajusteAplicado ? 'translate-x-4' : 'translate-x-0.5'}`} style={{ boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${sindical.reajusteAplicado ? 'translate-x-4' : 'translate-x-0.5'}`}
+                      style={{ boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
                   </div>
                 </div>
               </div>
@@ -465,7 +477,9 @@ export default function EmpresaForm() {
               ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
               : salvoOk ? '✓ Salvo!' : isEdicao ? 'Salvar alterações' : 'Cadastrar empresa'}
           </button>
-          <button type="button" onClick={() => navigate('/empresas')} className="btn btn-secondary">Cancelar</button>
+          <button type="button" onClick={() => navigate('/empresas')} className="btn btn-secondary">
+            Cancelar
+          </button>
         </div>
       </form>
     </div>
