@@ -5,19 +5,38 @@ import api from '../lib/api';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
+function KpiCard({ label, value, cor, destaque }) {
+  return (
+    <div className="card p-4">
+      <p className="text-xs font-semibold uppercase tracking-wide text-faint mb-2">{label}</p>
+      <div className="flex items-end gap-2">
+        <p className={`font-display font-bold text-3xl ${cor}`}>{value ?? '—'}</p>
+        {destaque && <p className="text-sm font-semibold text-faint mb-0.5">{destaque}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function Dashboard() {
   const { competencia, mes, ano } = useOutletContext();
-  const { usuario } = useAuth();
+  const { usuario, getResponsavelIdFiltro, filtroResponsavel } = useAuth();
   const [dados, setDados] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    carregar();
+  }, [competencia, filtroResponsavel]);
+
+  function carregar() {
     setLoading(true);
-    api.get(`/dashboard/${competencia}`)
+    const responsavelId = getResponsavelIdFiltro();
+    const params = new URLSearchParams();
+    if (responsavelId) params.append('responsavelId', responsavelId);
+    api.get(`/dashboard/${competencia}?${params}`)
       .then(r => setDados(r.data))
       .catch(console.error)
       .finally(() => setLoading(false));
-  }, [competencia]);
+  }
 
   const primeiroNome = usuario?.nome?.split(' ')[0] || '';
   const hora = new Date().getHours();
@@ -30,13 +49,11 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Saudação */}
       <div className="mb-6">
         <h1 className="font-display font-bold text-2xl text-ink">{saudacao}, {primeiroNome} 👋</h1>
         <p className="text-muted text-sm mt-1">{MESES[mes]} / {ano} — {dados.NAO_INICIADO + dados.PARCIAL} empresa(s) pendente(s)</p>
       </div>
 
-      {/* KPIs */}
       <div className="grid grid-cols-4 gap-3 mb-6">
         <KpiCard label="Total" value={dados.total} cor="bg-ink text-bg" />
         <KpiCard label="Finalizadas" value={dados.FINALIZADO || 0} cor="text-green-700" destaque={`${pct}%`} />
@@ -45,7 +62,6 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-4">
-        {/* Progresso por responsável */}
         <div className="card">
           <div className="card-header">
             <span className="card-title">Progresso por Responsável</span>
@@ -58,91 +74,35 @@ export default function Dashboard() {
                 <div key={r.id}>
                   <div className="flex justify-between mb-1.5">
                     <span className="text-sm font-medium text-ink">{r.nome}</span>
-                    <span className="text-xs text-muted">{r.finalizados}/{r.total} · <strong>{p}%</strong></span>
+                    <span className="text-xs text-faint">{r.finalizados}/{r.total} · {p}%</span>
                   </div>
                   <div className="progress-bar">
-                    <div className="progress-fill" style={{
-                      width: `${p}%`,
-                      background: p >= 80 ? '#3B6D11' : p >= 40 ? '#854F0B' : '#A32D2D'
-                    }} />
+                    <div className="progress-fill" style={{ width: `${p}%`, background: p === 100 ? '#3B6D11' : p > 0 ? '#185FA5' : '#A32D2D' }} />
                   </div>
                 </div>
               );
             })}
-            {!dados.porResponsavel?.length && <p className="text-sm text-faint">Nenhum dado</p>}
+            {!dados.porResponsavel?.length && (
+              <p className="text-xs text-faint text-center py-4">Sem dados de responsáveis.</p>
+            )}
           </div>
         </div>
 
-        {/* Tipos + Alertas */}
-        <div className="flex flex-col gap-4">
-          <div className="card">
-            <div className="card-header"><span className="card-title">Composição da carteira</span></div>
-            <div className="p-4 grid grid-cols-3 gap-3">
-              <StatMini label="Com funcionários" value={dados.comFuncionarios} color="green" />
-              <StatMini label="Pró-labore" value={dados.comProLabore} color="blue" />
-              <StatMini label="Sem movimento" value={dados.semMovimento} color="gray" />
-            </div>
+        <div className="card">
+          <div className="card-header">
+            <span className="card-title">Progresso geral</span>
           </div>
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title">Alertas CCT / Sindical</span>
-              {dados.cctPendentes > 0 && <span className="pill pill-red">{dados.cctPendentes} pendente(s)</span>}
+          <div className="p-5 flex flex-col items-center justify-center gap-4 h-40">
+            <p className="font-display font-bold text-5xl" style={{ color: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D' }}>
+              {pct}%
+            </p>
+            <div className="progress-bar w-full">
+              <div className="progress-fill" style={{ width: `${pct}%`, background: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D' }} />
             </div>
-            <div className="p-4 space-y-2">
-              <AlertRow label="CCT desatualizada" value={dados.cctPendentes} tipo="red" />
-              <AlertRow label="Reajuste não aplicado" value={dados.reajustePendente} tipo="amber" />
-            </div>
+            <p className="text-xs text-faint">{dados.FINALIZADO || 0} de {dados.total} empresas finalizadas</p>
           </div>
         </div>
       </div>
-
-      {/* Barra de progresso geral */}
-      <div className="card p-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="card-title">Progresso geral — {MESES[mes]} {ano}</span>
-          <span className="font-display font-bold text-xl text-ink">{pct}%</span>
-        </div>
-        <div className="progress-bar h-3">
-          <div className="progress-fill h-3" style={{
-            width: `${pct}%`,
-            background: pct >= 80 ? '#3B6D11' : pct >= 40 ? '#854F0B' : '#A32D2D'
-          }} />
-        </div>
-        <div className="flex justify-between mt-2 text-xs text-faint">
-          <span>{dados.FINALIZADO || 0} finalizadas</span>
-          <span>{dados.total} total</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function KpiCard({ label, value, cor, destaque }) {
-  const isInvertido = cor === 'bg-ink text-bg';
-  return (
-    <div className={`card p-4 ${isInvertido ? 'bg-ink' : ''}`}>
-      <p className={`text-[11px] font-semibold uppercase tracking-wide mb-2 ${isInvertido ? 'text-zinc-400' : 'text-faint'}`}>{label}</p>
-      <p className={`font-display font-bold text-3xl leading-none ${isInvertido ? 'text-bg' : cor}`}>{value}</p>
-      {destaque && <p className={`text-xs mt-1.5 ${isInvertido ? 'text-zinc-500' : 'text-faint'}`}>{destaque} concluídas</p>}
-    </div>
-  );
-}
-
-function StatMini({ label, value, color }) {
-  const cores = { green:'text-green-700 bg-green-50', blue:'text-blue-700 bg-blue-50', gray:'text-zinc-600 bg-zinc-50' };
-  return (
-    <div className={`rounded-lg p-3 ${cores[color]}`}>
-      <p className="font-display font-bold text-2xl leading-none">{value}</p>
-      <p className="text-xs mt-1 opacity-80">{label}</p>
-    </div>
-  );
-}
-
-function AlertRow({ label, value, tipo }) {
-  return (
-    <div className="flex items-center justify-between py-1">
-      <span className="text-sm text-muted">{label}</span>
-      <span className={`pill ${tipo === 'red' ? 'pill-red' : 'pill-amber'}`}>{value}</span>
     </div>
   );
 }
