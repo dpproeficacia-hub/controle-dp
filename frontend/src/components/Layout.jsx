@@ -2,6 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import SinoNotificacoes from './SinoNotificacoes';
+import api from '../lib/api';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
@@ -24,10 +25,8 @@ export default function Layout() {
     return () => window.removeEventListener('storage', load);
   }, []);
 
-  // Carrega lista de responsáveis para o seletor (só GESTOR/ADMIN)
   useEffect(() => {
     if (isGestor) {
-      const { default: api } = require('../lib/api');
       api.get('/responsaveis')
         .then(r => setResponsaveis(r.data))
         .catch(() => {});
@@ -45,13 +44,6 @@ export default function Layout() {
 
   const initials = usuario?.nome?.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();
 
-  // Label do filtro atual
-  const labelFiltro = filtroResponsavel === 'meu'
-    ? 'Minhas empresas'
-    : filtroResponsavel === 'todos'
-    ? 'Todas as empresas'
-    : responsaveis.find(r => r.id === filtroResponsavel)?.nome || 'Filtro';
-
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
       <aside className="w-[220px] min-w-[220px] flex flex-col border-r border-white/10"
@@ -59,9 +51,11 @@ export default function Layout() {
         <div className="px-4 py-5 border-b border-white/10">
           <div className="flex items-center gap-2.5">
             {id.logo ? (
-              <img src={id.logo} alt="logo" className="w-8 h-8 rounded-lg object-contain flex-shrink-0" style={{background:'rgba(255,255,255,0.15)',padding:'2px'}} />
+              <img src={id.logo} alt="logo" className="w-8 h-8 rounded-lg object-contain flex-shrink-0"
+                style={{background:'rgba(255,255,255,0.15)',padding:'2px'}} />
             ) : (
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:'rgba(255,255,255,0.2)'}}>
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{background:'rgba(255,255,255,0.2)'}}>
                 <svg width="16" height="16" viewBox="0 0 16 16" fill="white">
                   <rect x="1" y="1" width="6" height="6" rx="1.5"/>
                   <rect x="9" y="1" width="6" height="6" rx="1.5"/>
@@ -72,18 +66,21 @@ export default function Layout() {
             )}
             <div>
               <p className="font-display font-bold text-sm leading-tight text-white">{id.nomeEscritorio}</p>
-              <p className="text-[10px] font-medium uppercase tracking-wider" style={{color:'rgba(255,255,255,0.5)'}}>Depto. Pessoal</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider"
+                style={{color:'rgba(255,255,255,0.5)'}}>Depto. Pessoal</p>
             </div>
           </div>
         </div>
 
         <nav className="flex-1 px-2 py-2 overflow-y-auto">
-          <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Principal</p>
+          <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-widest"
+            style={{color:'rgba(255,255,255,0.4)'}}>Principal</p>
           <NI to="/dashboard">Dashboard</NI>
           <NI to="/mensal">Controle Mensal</NI>
           <NI to="/empresas">Empresas</NI>
 
-          <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
+          <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest"
+            style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
           <NI to="/sindical">Sindical / CCT</NI>
           <NI to="/tarefas">Tarefas</NI>
           <NI to="/agenda">Agenda</NI>
@@ -91,7 +88,8 @@ export default function Layout() {
 
           {isAdmin && (
             <>
-              <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
+              <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest"
+                style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
               <NI to="/identidade">Identidade Visual</NI>
               <NI to="/importacao">Importar Empresas</NI>
             </>
@@ -110,7 +108,8 @@ export default function Layout() {
               <p className="text-xs font-semibold text-white truncate">{usuario?.nome}</p>
               <p className="text-[10px]" style={{color:'rgba(255,255,255,0.5)'}}>{usuario?.nivel}</p>
             </div>
-            <button onClick={logout} className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+            <button onClick={logout}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
               style={{color:'rgba(255,100,100,0.8)'}}>Sair</button>
           </div>
         </div>
@@ -126,8 +125,7 @@ export default function Layout() {
               <select
                 value={filtroResponsavel}
                 onChange={e => setFiltroResponsavel(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-1.5 rounded-lg border border-border bg-surface2 text-xs font-semibold text-ink cursor-pointer hover:border-border2 transition-colors focus:outline-none focus:ring-1 focus:ring-ink"
-                title="Filtrar empresas por responsável">
+                className="appearance-none pl-3 pr-8 py-1.5 rounded-lg border border-border bg-surface2 text-xs font-semibold text-ink cursor-pointer hover:border-border2 transition-colors focus:outline-none focus:ring-1 focus:ring-ink">
                 <option value="meu">👤 Minhas empresas</option>
                 <option value="todos">🌐 Todas as empresas</option>
                 {responsaveis.filter(r => r.id !== usuario?.id).map(r => (
@@ -139,15 +137,18 @@ export default function Layout() {
           )}
 
           <div className="flex items-center gap-2">
-            <button onClick={()=>mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
+            <button onClick={()=>mudarMes(-1)}
+              className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
             <span className="text-sm font-semibold text-ink min-w-[110px] text-center">{MESES[mes]} / {ano}</span>
-            <button onClick={()=>mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
+            <button onClick={()=>mudarMes(1)}
+              className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
           </div>
 
           <SinoNotificacoes />
 
           {isGestor && (
-            <button onClick={()=>navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
+            <button onClick={()=>navigate('/empresas/nova')}
+              className="btn gap-1.5 text-white border-0"
               style={{background: id.corPrimaria}}>
               <span className="text-base leading-none">+</span> Nova Empresa
             </button>
@@ -166,7 +167,10 @@ function NI({ to, children }) {
   return (
     <NavLink to={to} className={({ isActive }) =>
       `flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer text-sm font-medium transition-all select-none ${isActive ? 'text-white' : 'hover:text-white'}`
-    } style={({ isActive }) => ({ background: isActive ? 'rgba(255,255,255,0.2)' : 'transparent', color: isActive ? 'white' : 'rgba(255,255,255,0.7)' })}>
+    } style={({ isActive }) => ({
+      background: isActive ? 'rgba(255,255,255,0.2)' : 'transparent',
+      color: isActive ? 'white' : 'rgba(255,255,255,0.7)'
+    })}>
       {children}
     </NavLink>
   );
