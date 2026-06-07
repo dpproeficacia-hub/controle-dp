@@ -7,20 +7,38 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
-// ─── ROTAS FIXAS PRIMEIRO (antes das rotas com parâmetros) ───────────────────
+// ─── ROTAS FIXAS PRIMEIRO ────────────────────────────────────────────────────
 
-// Listar todos os grupos (aba de gestão de tarefas)
+// Listar todos os grupos com paginação e filtro opcional por empresa
 router.get('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
-    const grupos = await prisma.grupoTarefa.findMany({
-      where: { ativo: true },
-      include: {
-        subtarefas: { where: { ativa: true }, orderBy: { ordem: 'asc' } },
-        empresa: { select: { id: true, razaoSocial: true } }
-      },
-      orderBy: [{ empresa: { razaoSocial: 'asc' } }, { diaVencimento: 'asc' }]
-    });
-    res.json(grupos);
+    const { empresaId, page = '1', limit = '50', busca } = req.query;
+    const skip = (Number(page) - 1) * Number(limit);
+
+    const where = { ativo: true };
+    if (empresaId) where.empresaId = empresaId;
+    if (busca) {
+      where.OR = [
+        { nome: { contains: busca, mode: 'insensitive' } },
+        { empresa: { razaoSocial: { contains: busca, mode: 'insensitive' } } }
+      ];
+    }
+
+    const [grupos, total] = await Promise.all([
+      prisma.grupoTarefa.findMany({
+        where,
+        include: {
+          subtarefas: { where: { ativa: true }, orderBy: { ordem: 'asc' } },
+          empresa: { select: { id: true, razaoSocial: true } }
+        },
+        orderBy: [{ empresa: { razaoSocial: 'asc' } }, { diaVencimento: 'asc' }],
+        skip,
+        take: Number(limit)
+      }),
+      prisma.grupoTarefa.count({ where })
+    ]);
+
+    res.json({ grupos, total, page: Number(page), limit: Number(limit) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -36,7 +54,7 @@ router.delete('/subtarefas/:id', requireNivel('GESTOR', 'ADMIN'), async (req, re
   }
 });
 
-// ─── CRIAR ───────────────────────────────────────────────────────────────────
+// ─── CRIAR ────────────────────────────────────────────────────────────────────
 
 router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
