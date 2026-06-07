@@ -11,16 +11,12 @@ router.get('/:competencia', async (req, res) => {
   const { responsavelId } = req.query;
   const anoAtual = new Date().getFullYear();
 
-  // Monta o filtro de empresas
   const whereBase = { ativa: true, saiuDoEscritorio: false };
   if (req.user.nivel === 'OPERADOR') {
-    // Operador sempre vê só as suas
     whereBase.responsavelId = req.user.id;
   } else if (responsavelId) {
-    // GESTOR/ADMIN filtrando por responsável específico
     whereBase.responsavelId = responsavelId;
   }
-  // Se não passou responsavelId e não é OPERADOR, vê todas
 
   const [empresas, historicos, sindicais, responsaveis] = await Promise.all([
     prisma.empresa.findMany({
