@@ -16,18 +16,35 @@ router.get('/:competencia', async (req, res) => {
     if (req.user.nivel === 'OPERADOR') whereEmpresa.responsavelId = req.user.id;
     else if (responsavelId) whereEmpresa.responsavelId = responsavelId;
 
+    // Busca empresas sem incluir subtarefas — só o necessário para a listagem
     const empresas = await prisma.empresa.findMany({
       where: whereEmpresa,
-      include: {
+      select: {
+        id: true,
+        razaoSocial: true,
+        cnpj: true,
+        tipoDocumento: true,
+        enquadramento: true,
+        anexoSimples: true,
+        tipo: true,
+        nivel: true,
+        prazoEntrega: true,
+        temFuncionarios: true,
+        temProLabore: true,
+        semMovimento: true,
+        fatorR: true,
+        enviaReinf: true,
         responsavel: { select: { id: true, nome: true } },
-        filiais: true,
-        gruposTarefa: {
-          where: { ativo: true },
-          include: { subtarefas: { where: { ativa: true } } }
-        },
+        // Conta grupos ativos sem carregar subtarefas
+        _count: { select: { gruposTarefa: { where: { ativo: true } } } },
         historicos: {
           where: { competencia },
-          include: { entregasGrupo: { include: { subtarefas: true } } }
+          select: {
+            id: true,
+            status: true,
+            // Conta entregas sem carregar subtarefas
+            _count: { select: { entregasGrupo: { where: { entregue: true } } } }
+          }
         }
       },
       orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
@@ -35,9 +52,8 @@ router.get('/:competencia', async (req, res) => {
 
     const resultado = empresas.map(emp => {
       const historico = emp.historicos[0] || null;
-      const entregasGrupo = historico?.entregasGrupo || [];
-      const totalGrupos = emp.gruposTarefa.length;
-      const entregues = entregasGrupo.filter(eg => eg.entregue).length;
+      const totalGrupos = emp._count.gruposTarefa;
+      const entregues = historico?._count?.entregasGrupo || 0;
 
       let statusCalc = 'NAO_INICIADO';
       if (totalGrupos > 0 && entregues >= totalGrupos) statusCalc = 'FINALIZADO';
@@ -45,12 +61,13 @@ router.get('/:competencia', async (req, res) => {
 
       return {
         ...emp,
+        _count: undefined,
         historicos: undefined,
         historico: {
           id: historico?.id || null,
           competencia,
           status: statusCalc,
-          entregasGrupo,
+          entregasGrupo: [],
         },
         _totalGrupos: totalGrupos,
         _entregues: entregues,
@@ -108,45 +125,9 @@ router.post('/:competencia/:empresaId', async (req, res) => {
       });
     }
 
-    const totalGrupos = empresa.gruposTarefa.length;
-    const entregasExistentes = await prisma.entregaGrupo.count({
-      where: { historicoId: historico.id, entregue: true }
-    });
-
-    let statusCalc = 'NAO_INICIADO';
-    if (totalGrupos > 0 && entregasExistentes >= totalGrupos) statusCalc = 'FINALIZADO';
-    else if (entregasExistentes > 0) statusCalc = 'PARCIAL';
-
-    const historicoAtualizado = await prisma.historicoMensal.update({
-      where: { id: historico.id },
-      data: { status: statusCalc, responsavelId: req.user.id },
-      include: {
-        filiais: true,
-        entregasGrupo: { include: { subtarefas: true } }
-      }
-    });
-
-    res.json(historicoAtualizado);
+    res.json(historico);
   } catch (e) {
     console.error('POST /:competencia/:empresaId erro:', e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-router.get('/historico/:empresaId', async (req, res) => {
-  try {
-    const historicos = await prisma.historicoMensal.findMany({
-      where: { empresaId: req.params.empresaId },
-      include: {
-        filiais: { include: { filial: true } },
-        responsavel: { select: { nome: true } },
-        entregasGrupo: { include: { subtarefas: true, grupo: true } }
-      },
-      orderBy: { competencia: 'desc' }
-    });
-    res.json(historicos);
-  } catch (e) {
-    console.error('GET /historico/:empresaId erro:', e);
     res.status(500).json({ error: e.message });
   }
 });
