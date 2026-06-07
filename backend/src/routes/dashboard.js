@@ -8,19 +8,34 @@ router.use(authMiddleware);
 
 router.get('/:competencia', async (req, res) => {
   const { competencia } = req.params;
+  const { responsavelId } = req.query;
   const anoAtual = new Date().getFullYear();
 
-  const whereBase = req.user.nivel === 'OPERADOR'
-    ? { ativa: true, responsavelId: req.user.id }
-    : { ativa: true };
+  // Monta o filtro de empresas
+  const whereBase = { ativa: true, saiuDoEscritorio: false };
+  if (req.user.nivel === 'OPERADOR') {
+    // Operador sempre vê só as suas
+    whereBase.responsavelId = req.user.id;
+  } else if (responsavelId) {
+    // GESTOR/ADMIN filtrando por responsável específico
+    whereBase.responsavelId = responsavelId;
+  }
+  // Se não passou responsavelId e não é OPERADOR, vê todas
 
   const [empresas, historicos, sindicais, responsaveis] = await Promise.all([
-    prisma.empresa.findMany({ where: whereBase, select: {
-      id: true, nivel: true, temFuncionarios: true, temProLabore: true, semMovimento: true, responsavelId: true
-    }}),
+    prisma.empresa.findMany({
+      where: whereBase,
+      select: {
+        id: true, nivel: true, temFuncionarios: true,
+        temProLabore: true, semMovimento: true, responsavelId: true
+      }
+    }),
     prisma.historicoMensal.findMany({ where: { competencia } }),
     prisma.controleSindical.findMany(),
-    prisma.usuario.findMany({ where: { ativo: true, nivel: { in: ['OPERADOR', 'GESTOR'] } }, select: { id: true, nome: true } })
+    prisma.usuario.findMany({
+      where: { ativo: true, nivel: { in: ['OPERADOR', 'GESTOR'] } },
+      select: { id: true, nome: true }
+    })
   ]);
 
   const historicoMap = Object.fromEntries(historicos.map(h => [h.empresaId, h]));
@@ -49,11 +64,10 @@ router.get('/:competencia', async (req, res) => {
   const cctPendentes = sindicais.filter(s => s.ultimaCct < anoAtual).length;
   const reajustePendente = sindicais.filter(s => !s.reajusteAplicado).length;
 
-  // Enriquecer porResponsavel com nomes
   const porResponsavelNomeado = responsaveis.map(r => ({
     id: r.id, nome: r.nome,
     ...(stats.porResponsavel[r.id] || { total: 0, finalizados: 0 })
-  }));
+  })).filter(r => r.total > 0);
 
   res.json({
     competencia, ...stats,
