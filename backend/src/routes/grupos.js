@@ -9,12 +9,10 @@ router.use(authMiddleware);
 
 // ─── ROTAS FIXAS PRIMEIRO ────────────────────────────────────────────────────
 
-// Listar todos os grupos com paginação e filtro opcional por empresa
 router.get('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { empresaId, page = '1', limit = '50', busca } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
-
     const where = { ativo: true };
     if (empresaId) where.empresaId = empresaId;
     if (busca) {
@@ -23,7 +21,6 @@ router.get('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         { empresa: { razaoSocial: { contains: busca, mode: 'insensitive' } } }
       ];
     }
-
     const [grupos, total] = await Promise.all([
       prisma.grupoTarefa.findMany({
         where,
@@ -37,14 +34,12 @@ router.get('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       }),
       prisma.grupoTarefa.count({ where })
     ]);
-
     res.json({ grupos, total, page: Number(page), limit: Number(limit) });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Remover subtarefa (rota fixa — antes de /:id)
 router.delete('/subtarefas/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     await prisma.subtarefa.update({ where: { id: req.params.id }, data: { ativa: false } });
@@ -54,27 +49,21 @@ router.delete('/subtarefas/:id', requireNivel('GESTOR', 'ADMIN'), async (req, re
   }
 });
 
-// ─── CRIAR ────────────────────────────────────────────────────────────────────
-
 router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { nome, diaVencimento, tipo, subtarefas, empresaIds, inicioCobrancaEm } = req.body;
     const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
-
     const criados = [];
     for (const empresaId of ids) {
       const grupo = await prisma.grupoTarefa.create({
         data: {
-          empresaId,
-          nome,
+          empresaId, nome,
           diaVencimento: Number(diaVencimento),
           tipo: tipo || 'RECORRENTE',
           inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null,
           subtarefas: {
             create: (subtarefas || []).map((s, i) => ({
-              nome: s.nome,
-              temValor: s.temValor || false,
-              ordem: i
+              nome: s.nome, temValor: s.temValor || false, ordem: i
             }))
           }
         },
@@ -85,7 +74,6 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       });
       criados.push(grupo);
     }
-
     res.status(201).json(criados.length === 1 ? criados[0] : criados);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -94,9 +82,13 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
 
 // ─── ROTAS COM PARÂMETROS ─────────────────────────────────────────────────────
 
-// Listar grupos de uma empresa
 router.get('/:empresaId', async (req, res) => {
   try {
+    const empresa = await prisma.empresa.findUnique({
+      where: { id: req.params.empresaId },
+      select: { participaTarefas: true }
+    });
+    if (empresa && empresa.participaTarefas === false) return res.json([]);
     const grupos = await prisma.grupoTarefa.findMany({
       where: { empresaId: req.params.empresaId, ativo: true },
       include: { subtarefas: { where: { ativa: true }, orderBy: { ordem: 'asc' } } },
@@ -108,7 +100,6 @@ router.get('/:empresaId', async (req, res) => {
   }
 });
 
-// Buscar entregas de uma empresa em uma competência
 router.get('/:empresaId/entregas/:competencia', async (req, res) => {
   try {
     const { empresaId, competencia } = req.params;
@@ -116,7 +107,6 @@ router.get('/:empresaId/entregas/:competencia', async (req, res) => {
       where: { empresaId_competencia: { empresaId, competencia } }
     });
     if (!historico) return res.json([]);
-
     const entregas = await prisma.entregaGrupo.findMany({
       where: { historicoId: historico.id },
       include: { subtarefas: true }
@@ -127,16 +117,13 @@ router.get('/:empresaId/entregas/:competencia', async (req, res) => {
   }
 });
 
-// Atualizar grupo
 router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { nome, diaVencimento, tipo, inicioCobrancaEm } = req.body;
     const grupo = await prisma.grupoTarefa.update({
       where: { id: req.params.id },
       data: {
-        nome,
-        diaVencimento: Number(diaVencimento),
-        tipo,
+        nome, diaVencimento: Number(diaVencimento), tipo,
         inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null
       },
       include: {
@@ -150,7 +137,6 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-// Adicionar subtarefa a um grupo
 router.post('/:grupoId/subtarefas', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { nome, temValor } = req.body;
@@ -164,11 +150,10 @@ router.post('/:grupoId/subtarefas', requireNivel('GESTOR', 'ADMIN'), async (req,
   }
 });
 
-// Salvar entregas do mês
 router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
   try {
     const { grupoId, competencia, empresaId } = req.params;
-    const { entregue, dataEntrega, subtarefas } = req.body;
+    const { entregue, dispensada, dataEntrega, subtarefas } = req.body;
 
     let historico = await prisma.historicoMensal.findUnique({
       where: { empresaId_competencia: { empresaId, competencia } }
@@ -182,18 +167,20 @@ router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
     const entregaGrupo = await prisma.entregaGrupo.upsert({
       where: { grupoId_historicoId: { grupoId, historicoId: historico.id } },
       create: {
-        grupoId,
-        historicoId: historico.id,
+        grupoId, historicoId: historico.id,
         entregue: entregue || false,
+        dispensada: dispensada || false,
         dataEntrega: dataEntrega ? new Date(dataEntrega) : null
       },
       update: {
         entregue: entregue || false,
+        dispensada: dispensada || false,
         dataEntrega: dataEntrega ? new Date(dataEntrega) : null
       }
     });
 
-    if (subtarefas && subtarefas.length > 0) {
+    // Só salva subtarefas se não foi dispensada
+    if (!dispensada && subtarefas && subtarefas.length > 0) {
       for (const sub of subtarefas) {
         await prisma.entregaSubtarefa.upsert({
           where: { subtarefaId_entregaGrupoId: { subtarefaId: sub.subtarefaId, entregaGrupoId: entregaGrupo.id } },
@@ -209,7 +196,6 @@ router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
   }
 });
 
-// Remover grupo
 router.delete('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     await prisma.grupoTarefa.update({ where: { id: req.params.id }, data: { ativo: false } });
