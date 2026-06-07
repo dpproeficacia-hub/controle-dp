@@ -6,12 +6,13 @@ import SinoNotificacoes from './SinoNotificacoes';
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 export default function Layout() {
-  const { usuario, logout, isAdmin, isGestor } = useAuth();
+  const { usuario, logout, isAdmin, isGestor, filtroResponsavel, setFiltroResponsavel } = useAuth();
   const navigate = useNavigate();
   const now = new Date();
   const [mes, setMes] = useState(now.getMonth());
   const [ano, setAno] = useState(now.getFullYear());
   const [id, setId] = useState({ nomeEscritorio:'DPSmart', corPrimaria:'#1C1B19', corSecundaria:'#185FA5', logo:'' });
+  const [responsaveis, setResponsaveis] = useState([]);
 
   useEffect(() => {
     const load = () => {
@@ -23,6 +24,16 @@ export default function Layout() {
     return () => window.removeEventListener('storage', load);
   }, []);
 
+  // Carrega lista de responsáveis para o seletor (só GESTOR/ADMIN)
+  useEffect(() => {
+    if (isGestor) {
+      const { default: api } = require('../lib/api');
+      api.get('/responsaveis')
+        .then(r => setResponsaveis(r.data))
+        .catch(() => {});
+    }
+  }, [isGestor]);
+
   const competencia = `${ano}-${String(mes+1).padStart(2,'0')}`;
 
   function mudarMes(d) {
@@ -33,6 +44,13 @@ export default function Layout() {
   }
 
   const initials = usuario?.nome?.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();
+
+  // Label do filtro atual
+  const labelFiltro = filtroResponsavel === 'meu'
+    ? 'Minhas empresas'
+    : filtroResponsavel === 'todos'
+    ? 'Todas as empresas'
+    : responsaveis.find(r => r.id === filtroResponsavel)?.nome || 'Filtro';
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
@@ -99,14 +117,35 @@ export default function Layout() {
       </aside>
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <header className="bg-surface border-b border-border h-14 flex items-center px-6 gap-4 flex-shrink-0">
+        <header className="bg-surface border-b border-border h-14 flex items-center px-6 gap-3 flex-shrink-0">
           <div className="flex-1" />
+
+          {/* Seletor de responsável — só GESTOR/ADMIN */}
+          {isGestor && (
+            <div className="relative">
+              <select
+                value={filtroResponsavel}
+                onChange={e => setFiltroResponsavel(e.target.value)}
+                className="appearance-none pl-3 pr-8 py-1.5 rounded-lg border border-border bg-surface2 text-xs font-semibold text-ink cursor-pointer hover:border-border2 transition-colors focus:outline-none focus:ring-1 focus:ring-ink"
+                title="Filtrar empresas por responsável">
+                <option value="meu">👤 Minhas empresas</option>
+                <option value="todos">🌐 Todas as empresas</option>
+                {responsaveis.filter(r => r.id !== usuario?.id).map(r => (
+                  <option key={r.id} value={r.id}>👤 {r.nome}</option>
+                ))}
+              </select>
+              <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-faint text-[10px]">▼</div>
+            </div>
+          )}
+
           <div className="flex items-center gap-2">
             <button onClick={()=>mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
             <span className="text-sm font-semibold text-ink min-w-[110px] text-center">{MESES[mes]} / {ano}</span>
             <button onClick={()=>mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
           </div>
+
           <SinoNotificacoes />
+
           {isGestor && (
             <button onClick={()=>navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
               style={{background: id.corPrimaria}}>
@@ -114,6 +153,7 @@ export default function Layout() {
             </button>
           )}
         </header>
+
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet context={{ competencia, mes, ano }} />
         </main>
