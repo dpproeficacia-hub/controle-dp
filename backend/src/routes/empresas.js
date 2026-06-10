@@ -35,7 +35,7 @@ router.get('/', async (req, res) => {
         matriz: { select: { id: true, razaoSocial: true } },
         filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       },
-      orderBy: [{ nivel: 'asc' }, { razaoSocial: 'asc' }]
+      orderBy: [{ razaoSocial: 'asc' }]
     });
     res.json(empresas);
   } catch (e) {
@@ -68,10 +68,9 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       razaoSocial, cnpj, tipoDocumento, enquadramento, tipo, nivel, prazoEntrega,
       temFuncionarios, temProLabore, semMovimento, temFilial,
       fatorR, enviaReinf, observacoes, responsavelId,
-      matrizId, filiaisIds
+      matrizId, filiaisIds, participaTarefas
     } = req.body;
 
-    // Remove qualquer caractere não numérico do documento
     const docLimpo = cnpj ? cnpj.replace(/\D/g, '') : '';
     const prazo = prazoEntrega === '' || prazoEntrega === null || prazoEntrega === undefined
       ? null : Number(prazoEntrega) || null;
@@ -91,6 +90,8 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         temFilial: temFilial || false,
         fatorR: fatorR || false,
         enviaReinf: enviaReinf || false,
+        // PADRÃO AGORA É FALSE — empresa não tem tarefas por padrão
+        participaTarefas: participaTarefas !== undefined ? participaTarefas : false,
         observacoes: observacoes || null,
         responsavelId: responsavelId || null,
         matrizId: matrizId || null,
