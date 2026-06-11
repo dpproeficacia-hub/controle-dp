@@ -8,19 +8,25 @@ const prisma = new PrismaClient();
 router.use(authMiddleware);
 
 router.get('/', async (req, res) => {
-  const usuarios = await prisma.usuario.findMany({
-    where: { ativo: true },
-    select: { id: true, nome: true, email: true, nivel: true, criadoEm: true }
-  });
-  res.json(usuarios);
+  try {
+    const usuarios = await prisma.usuario.findMany({
+      where: { ativo: true, escritorioId: req.user.escritorioId },
+      select: { id: true, nome: true, email: true, nivel: true, criadoEm: true }
+    });
+    res.json(usuarios);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { nome, email, senha, nivel } = req.body;
+    const existe = await prisma.usuario.findUnique({ where: { email } });
+    if (existe) return res.status(400).json({ error: 'Email já cadastrado' });
     const senhaHash = await bcrypt.hash(senha, 10);
     const usuario = await prisma.usuario.create({
-      data: { nome, email, senha: senhaHash, nivel },
+      data: { nome, email, senha: senhaHash, nivel, escritorioId: req.user.escritorioId },
       select: { id: true, nome: true, email: true, nivel: true, criadoEm: true }
     });
     res.status(201).json(usuario);
