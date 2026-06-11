@@ -11,7 +11,7 @@ router.get('/', async (req, res) => {
   try {
     const { responsavelId, nivel, tipo, semMovimento, temFuncionarios,
             temProLabore, enviaReinf, fatorR, incluirSaiu } = req.query;
-    const where = { ativa: true };
+    const where = { ativa: true, escritorioId: req.user.escritorioId };
     if (req.user.nivel === 'OPERADOR') {
       where.responsavelId = req.user.id;
       where.saiuDoEscritorio = false;
@@ -30,8 +30,7 @@ router.get('/', async (req, res) => {
       where,
       include: {
         responsavel: { select: { id: true, nome: true } },
-        sindical: true,
-        filiais: true,
+        sindical: true, filiais: true,
         matriz: { select: { id: true, razaoSocial: true } },
         filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       },
@@ -45,12 +44,11 @@ router.get('/', async (req, res) => {
 
 router.get('/:id', async (req, res) => {
   try {
-    const empresa = await prisma.empresa.findUnique({
-      where: { id: req.params.id },
+    const empresa = await prisma.empresa.findFirst({
+      where: { id: req.params.id, escritorioId: req.user.escritorioId },
       include: {
         responsavel: { select: { id: true, nome: true } },
-        sindical: true,
-        filiais: true,
+        sindical: true, filiais: true,
         matriz: { select: { id: true, razaoSocial: true } },
         filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       }
@@ -66,31 +64,23 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const {
       razaoSocial, cnpj, tipoDocumento, enquadramento, tipo, nivel, prazoEntrega,
-      temFuncionarios, temProLabore, semMovimento, temFilial,
-      fatorR, enviaReinf, observacoes, responsavelId,
-      matrizId, filiaisIds, participaTarefas
+      temFuncionarios, temProLabore, semMovimento, temFilial, fatorR, enviaReinf,
+      observacoes, responsavelId, matrizId, filiaisIds, participaTarefas
     } = req.body;
-
     const docLimpo = cnpj ? cnpj.replace(/\D/g, '') : '';
-    const prazo = prazoEntrega === '' || prazoEntrega === null || prazoEntrega === undefined
-      ? null : Number(prazoEntrega) || null;
-
+    const prazo = !prazoEntrega ? null : Number(prazoEntrega) || null;
     const empresa = await prisma.empresa.create({
       data: {
-        razaoSocial,
-        cnpj: docLimpo,
+        escritorioId: req.user.escritorioId,
+        razaoSocial, cnpj: docLimpo,
         tipoDocumento: tipoDocumento || 'CNPJ',
-        enquadramento,
-        tipo,
-        nivel: nivel || 'N3',
-        prazoEntrega: prazo,
+        enquadramento, tipo, nivel: nivel || 'N3', prazoEntrega: prazo,
         temFuncionarios: temFuncionarios || false,
         temProLabore: temProLabore || false,
         semMovimento: semMovimento || false,
         temFilial: temFilial || false,
         fatorR: fatorR || false,
         enviaReinf: enviaReinf || false,
-        // PADRÃO AGORA É FALSE — empresa não tem tarefas por padrão
         participaTarefas: participaTarefas !== undefined ? participaTarefas : false,
         observacoes: observacoes || null,
         responsavelId: responsavelId || null,
@@ -103,14 +93,12 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       }
     });
-
     if (Array.isArray(filiaisIds) && filiaisIds.length > 0) {
       await prisma.empresa.updateMany({
-        where: { id: { in: filiaisIds } },
-        data: { matrizId: empresa.id, temFilial: false }
+        where: { id: { in: filiaisIds }, escritorioId: req.user.escritorioId },
+        data: { matrizId: empresa.id }
       });
     }
-
     res.status(201).json(empresa);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -121,14 +109,11 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { sindical, filiais, filiaisIds, ...dados } = req.body;
     if (dados.cnpj) dados.cnpj = dados.cnpj.replace(/\D/g, '');
-    if (dados.prazoEntrega === '' || dados.prazoEntrega === null || dados.prazoEntrega === undefined) {
-      dados.prazoEntrega = null;
-    } else {
-      dados.prazoEntrega = Number(dados.prazoEntrega) || null;
-    }
+    dados.prazoEntrega = !dados.prazoEntrega ? null : Number(dados.prazoEntrega) || null;
     if (dados.responsavelId === '') dados.responsavelId = null;
     if (dados.matrizId === '') dados.matrizId = null;
-
+    // Remove campos que não existem no model
+    delete dados.escritorioId;
     const empresa = await prisma.empresa.update({
       where: { id: req.params.id },
       data: dados,
@@ -139,20 +124,18 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         filiaisVinculadas: { select: { id: true, razaoSocial: true } },
       }
     });
-
     if (Array.isArray(filiaisIds)) {
       await prisma.empresa.updateMany({
-        where: { matrizId: req.params.id, id: { notIn: filiaisIds } },
+        where: { matrizId: req.params.id, id: { notIn: filiaisIds }, escritorioId: req.user.escritorioId },
         data: { matrizId: null }
       });
       if (filiaisIds.length > 0) {
         await prisma.empresa.updateMany({
-          where: { id: { in: filiaisIds } },
-          data: { matrizId: req.params.id, temFilial: false }
+          where: { id: { in: filiaisIds }, escritorioId: req.user.escritorioId },
+          data: { matrizId: req.params.id }
         });
       }
     }
-
     res.json(empresa);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -191,7 +174,7 @@ router.post('/excluir-lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) =
       return res.status(400).json({ error: 'Nenhuma empresa selecionada.' });
     }
     await prisma.empresa.updateMany({
-      where: { id: { in: ids } },
+      where: { id: { in: ids }, escritorioId: req.user.escritorioId },
       data: { ativa: false }
     });
     res.json({ ok: true, total: ids.length });
