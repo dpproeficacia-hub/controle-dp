@@ -8,8 +8,19 @@ const ESCOPO_OPTS = [
   { key: 'selecionar', label: 'Empresas selecionadas' },
 ];
 
+const MESES = [
+  { v: '01', l: 'Janeiro' }, { v: '02', l: 'Fevereiro' }, { v: '03', l: 'Março' },
+  { v: '04', l: 'Abril' },   { v: '05', l: 'Maio' },      { v: '06', l: 'Junho' },
+  { v: '07', l: 'Julho' },   { v: '08', l: 'Agosto' },    { v: '09', l: 'Setembro' },
+  { v: '10', l: 'Outubro' }, { v: '11', l: 'Novembro' },  { v: '12', l: 'Dezembro' },
+];
+
+const anoAtual = new Date().getFullYear();
+const ANOS = Array.from({ length: 6 }, (_, i) => anoAtual - 1 + i);
+
 const formVazio = {
-  nome: '', diaVencimento: '', tipo: 'RECORRENTE', inicioCobrancaEm: '',
+  nome: '', diaVencimento: '', tipo: 'RECORRENTE',
+  inicioMes: '', inicioAno: '',
   escopo: 'todas', empresaId: '', empresasIds: [], subtarefas: [],
 };
 
@@ -25,8 +36,8 @@ export default function Tarefas() {
   const [editandoId, setEditandoId] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [mostraForm, setMostraForm] = useState(false);
-  const [filtroBusca, setFiltroBusca] = useState('');
   const [buscaInput, setBuscaInput] = useState('');
+  const [filtroBusca, setFiltroBusca] = useState('');
   const { isGestor } = useAuth();
 
   useEffect(() => {
@@ -42,19 +53,12 @@ export default function Tarefas() {
     const params = new URLSearchParams({ page: p, limit: LIMIT });
     if (busca) params.append('busca', busca);
     api.get(`/grupos?${params}`)
-      .then(r => {
-        setGrupos(r.data.grupos);
-        setTotal(r.data.total);
-      })
+      .then(r => { setGrupos(r.data.grupos); setTotal(r.data.total); })
       .finally(() => setLoading(false));
   }
 
-  // Debounce da busca — só dispara 400ms após parar de digitar
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setFiltroBusca(buscaInput);
-      setPage(1);
-    }, 400);
+    const timer = setTimeout(() => { setFiltroBusca(buscaInput); setPage(1); }, 400);
     return () => clearTimeout(timer);
   }, [buscaInput]);
 
@@ -67,9 +71,16 @@ export default function Tarefas() {
 
   function iniciarEdicao(g) {
     setEditandoId(g.id);
+    // Extrai mês e ano do inicioCobrancaEm se existir
+    let inicioMes = '', inicioAno = '';
+    if (g.inicioCobrancaEm) {
+      const d = new Date(g.inicioCobrancaEm);
+      inicioMes = String(d.getUTCMonth() + 1).padStart(2, '0');
+      inicioAno = String(d.getUTCFullYear());
+    }
     setForm({
       nome: g.nome, diaVencimento: g.diaVencimento, tipo: g.tipo,
-      inicioCobrancaEm: g.inicioCobrancaEm ? g.inicioCobrancaEm.slice(0, 10) : '',
+      inicioMes, inicioAno,
       escopo: 'uma', empresaId: g.empresaId, empresasIds: [],
       subtarefas: (g.subtarefas || []).map(s => ({ nome: s.nome, temValor: s.temValor })),
     });
@@ -110,11 +121,17 @@ export default function Tarefas() {
     }
     if (empresaIds.length === 0) { alert('Nenhuma empresa disponível.'); return; }
 
+    // Monta a data de início (dia 1 do mês selecionado)
+    let inicioCobrancaEm = null;
+    if (form.inicioMes && form.inicioAno) {
+      inicioCobrancaEm = `${form.inicioAno}-${form.inicioMes}-01`;
+    }
+
     setSalvando(true);
     try {
       const payload = {
-        nome: form.nome, diaVencimento: Number(form.diaVencimento), tipo: form.tipo,
-        inicioCobrancaEm: form.inicioCobrancaEm || null,
+        nome: form.nome, diaVencimento: Number(form.diaVencimento),
+        tipo: form.tipo, inicioCobrancaEm,
         subtarefas: form.subtarefas, empresaIds,
       };
       if (editandoId) {
@@ -138,8 +155,14 @@ export default function Tarefas() {
     carregar(page, filtroBusca);
   }
 
+  function fmtInicio(inicioCobrancaEm) {
+    if (!inicioCobrancaEm) return null;
+    const d = new Date(inicioCobrancaEm);
+    const mes = MESES[d.getUTCMonth()];
+    return `${mes.l}/${d.getUTCFullYear()}`;
+  }
+
   const totalPages = Math.ceil(total / LIMIT);
-  const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : null;
 
   return (
     <div>
@@ -181,14 +204,37 @@ export default function Tarefas() {
                   <option value="PONTUAL">Pontual (uma vez)</option>
                 </select>
               </div>
+
+              {/* Início de cobrança — mês e ano */}
               <div className="col-span-2">
                 <label className="label">
                   Início de cobrança
-                  <span className="text-faint font-normal ml-1">(a partir de quando a tarefa será exigida)</span>
+                  <span className="text-faint font-normal ml-1">(mês a partir do qual a tarefa será exigida)</span>
                 </label>
-                <input className="input" type="date" value={form.inicioCobrancaEm}
-                  onChange={e => setForm(f => ({ ...f, inicioCobrancaEm: e.target.value }))} />
-                <p className="text-xs text-faint mt-1">Deixe em branco para cobrar desde o cadastro.</p>
+                <div className="flex gap-2">
+                  <select className="select flex-1" value={form.inicioMes}
+                    onChange={e => setForm(f => ({ ...f, inicioMes: e.target.value }))}>
+                    <option value="">Mês</option>
+                    {MESES.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                  </select>
+                  <select className="select w-32" value={form.inicioAno}
+                    onChange={e => setForm(f => ({ ...f, inicioAno: e.target.value }))}>
+                    <option value="">Ano</option>
+                    {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  {(form.inicioMes || form.inicioAno) && (
+                    <button type="button"
+                      onClick={() => setForm(f => ({ ...f, inicioMes: '', inicioAno: '' }))}
+                      className="btn btn-secondary text-xs px-3 flex-shrink-0">
+                      Limpar
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-faint mt-1">
+                  {form.inicioMes && form.inicioAno
+                    ? `A tarefa será exigida a partir de ${MESES.find(m => m.v === form.inicioMes)?.l}/${form.inicioAno}`
+                    : 'Deixe em branco para cobrar desde já'}
+                </p>
               </div>
             </div>
 
@@ -263,6 +309,7 @@ export default function Tarefas() {
               </div>
             </div>
           </div>
+
           <div className="flex gap-3 mt-5">
             <button type="submit" disabled={salvando} className="btn btn-primary">
               {salvando ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : editandoId ? 'Salvar alterações' : 'Criar tarefa'}
@@ -282,7 +329,8 @@ export default function Tarefas() {
         <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>
       ) : grupos.length === 0 ? (
         <div className="card p-10 text-center">
-          <p className="text-muted text-sm">Nenhuma tarefa encontrada.</p>
+          <p className="text-muted text-sm">Nenhuma tarefa cadastrada.</p>
+          <p className="text-faint text-xs mt-1">Clique em "+ Nova tarefa" para começar.</p>
         </div>
       ) : (
         <>
@@ -306,7 +354,9 @@ export default function Tarefas() {
                         {g.tipo === 'RECORRENTE' ? 'Recorrente' : 'Pontual'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-muted">{fmtData(g.inicioCobrancaEm) || <span className="text-faint">—</span>}</td>
+                    <td className="px-4 py-3 text-sm text-muted">
+                      {fmtInicio(g.inicioCobrancaEm) || <span className="text-faint">—</span>}
+                    </td>
                     <td className="px-4 py-3 text-sm text-muted">
                       {g.subtarefas?.length > 0
                         ? <span className="pill pill-gray text-[10px]">{g.subtarefas.length} sub</span>
@@ -326,7 +376,6 @@ export default function Tarefas() {
             </table>
           </div>
 
-          {/* Paginação */}
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
               <p className="text-xs text-faint">
