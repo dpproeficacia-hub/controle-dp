@@ -4,15 +4,12 @@ const { authMiddleware, requireNivel } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
-
 router.use(authMiddleware);
-
-// ─── SINDICATOS ───────────────────────────────────────────────────────────────
 
 router.get('/sindicatos', async (req, res) => {
   try {
     const sindicatos = await prisma.sindicato.findMany({
-      where: { ativo: true },
+      where: { ativo: true, escritorioId: req.user.escritorioId },
       include: { controles: { select: { empresaId: true } } },
       orderBy: { nome: 'asc' }
     });
@@ -26,18 +23,13 @@ router.post('/sindicatos', async (req, res) => {
   try {
     const { nome, dataBase, observacoes, empresasIds } = req.body;
     const sindicato = await prisma.sindicato.create({
-      data: { nome, dataBase, observacoes: observacoes || null }
+      data: { nome, dataBase, observacoes: observacoes || null, escritorioId: req.user.escritorioId }
     });
     if (Array.isArray(empresasIds) && empresasIds.length > 0) {
       for (const empresaId of empresasIds) {
         await prisma.controleSindical.upsert({
           where: { empresaId },
-          create: {
-            empresaId,
-            sindicatoId: sindicato.id,
-            ultimaCct: new Date().getFullYear(),
-            reajusteAplicado: false
-          },
+          create: { empresaId, sindicatoId: sindicato.id, ultimaCct: new Date().getFullYear(), reajusteAplicado: false },
           update: { sindicatoId: sindicato.id }
         });
       }
@@ -63,12 +55,7 @@ router.put('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) 
       for (const empresaId of empresasIds) {
         await prisma.controleSindical.upsert({
           where: { empresaId },
-          create: {
-            empresaId,
-            sindicatoId: req.params.id,
-            ultimaCct: new Date().getFullYear(),
-            reajusteAplicado: false
-          },
+          create: { empresaId, sindicatoId: req.params.id, ultimaCct: new Date().getFullYear(), reajusteAplicado: false },
           update: { sindicatoId: req.params.id }
         });
       }
@@ -81,28 +68,26 @@ router.put('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) 
 
 router.delete('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
-    await prisma.sindicato.update({
-      where: { id: req.params.id },
-      data: { ativo: false }
-    });
+    await prisma.sindicato.update({ where: { id: req.params.id }, data: { ativo: false } });
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// ─── CONTROLE SINDICAL ────────────────────────────────────────────────────────
-
 router.get('/', async (req, res) => {
   try {
     const controles = await prisma.controleSindical.findMany({
       include: {
-        empresa: { select: { id: true, razaoSocial: true, temFuncionarios: true } },
+        empresa: { select: { id: true, razaoSocial: true, temFuncionarios: true, escritorioId: true } },
         sindicato: true
       },
       orderBy: { empresa: { razaoSocial: 'asc' } }
     });
-    const filtrados = controles.filter(c => c.empresa?.temFuncionarios === true);
+    const filtrados = controles.filter(c =>
+      c.empresa?.temFuncionarios === true &&
+      c.empresa?.escritorioId === req.user.escritorioId
+    );
     res.json(filtrados);
   } catch (e) {
     res.status(500).json({ error: e.message });
