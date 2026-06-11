@@ -7,12 +7,12 @@ import api from '../lib/api';
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
 export default function Layout() {
-  const { usuario, logout, isAdmin, isGestor, filtroResponsavel, setFiltroResponsavel } = useAuth();
+  const { usuario, escritorio, logout, isAdmin, isGestor, filtroResponsavel, setFiltroResponsavel } = useAuth();
   const navigate = useNavigate();
   const now = new Date();
   const [mes, setMes] = useState(now.getMonth());
   const [ano, setAno] = useState(now.getFullYear());
-  const [id, setId] = useState({ nomeEscritorio:'DPSmart', corPrimaria:'#1C1B19', corSecundaria:'#185FA5', logo:'' });
+  const [id, setId] = useState({ corPrimaria:'#1C1B19', corSecundaria:'#185FA5', logo:'' });
   const [responsaveis, setResponsaveis] = useState([]);
 
   useEffect(() => {
@@ -27,9 +27,7 @@ export default function Layout() {
 
   useEffect(() => {
     if (isGestor) {
-      api.get('/responsaveis')
-        .then(r => setResponsaveis(r.data))
-        .catch(() => {});
+      api.get('/responsaveis').then(r => setResponsaveis(r.data)).catch(() => {});
     }
   }, [isGestor]);
 
@@ -43,6 +41,7 @@ export default function Layout() {
   }
 
   const initials = usuario?.nome?.split(' ').slice(0,2).map(p=>p[0]).join('').toUpperCase();
+  const nomeEscritorio = escritorio?.nome || 'DPSmart';
 
   return (
     <div className="flex h-screen overflow-hidden bg-bg">
@@ -64,32 +63,26 @@ export default function Layout() {
                 </svg>
               </div>
             )}
-            <div>
-              <p className="font-display font-bold text-sm leading-tight text-white">{id.nomeEscritorio}</p>
-              <p className="text-[10px] font-medium uppercase tracking-wider"
-                style={{color:'rgba(255,255,255,0.5)'}}>Depto. Pessoal</p>
+            <div className="min-w-0">
+              <p className="font-display font-bold text-sm leading-tight text-white truncate">{nomeEscritorio}</p>
+              <p className="text-[10px] font-medium uppercase tracking-wider" style={{color:'rgba(255,255,255,0.5)'}}>Depto. Pessoal</p>
             </div>
           </div>
         </div>
 
         <nav className="flex-1 px-2 py-2 overflow-y-auto">
-          <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-widest"
-            style={{color:'rgba(255,255,255,0.4)'}}>Principal</p>
+          <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Principal</p>
           <NI to="/dashboard">Dashboard</NI>
           <NI to="/mensal">Controle Mensal</NI>
           <NI to="/empresas">Empresas</NI>
-
-          <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest"
-            style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
+          <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
           <NI to="/sindical">Sindical / CCT</NI>
           <NI to="/tarefas">Tarefas</NI>
           <NI to="/agenda">Agenda</NI>
           {isGestor && <NI to="/responsaveis">Responsáveis</NI>}
-
           {isAdmin && (
             <>
-              <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest"
-                style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
+              <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
               <NI to="/identidade">Identidade Visual</NI>
               <NI to="/importacao">Importar Empresas</NI>
             </>
@@ -108,8 +101,7 @@ export default function Layout() {
               <p className="text-xs font-semibold text-white truncate">{usuario?.nome}</p>
               <p className="text-[10px]" style={{color:'rgba(255,255,255,0.5)'}}>{usuario?.nivel}</p>
             </div>
-            <button onClick={logout}
-              className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+            <button onClick={logout} className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
               style={{color:'rgba(255,100,100,0.8)'}}>Sair</button>
           </div>
         </div>
@@ -118,8 +110,6 @@ export default function Layout() {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-surface border-b border-border h-14 flex items-center px-6 gap-3 flex-shrink-0">
           <div className="flex-1" />
-
-          {/* Seletor de responsável — só GESTOR/ADMIN */}
           {isGestor && (
             <div className="relative">
               <select
@@ -135,26 +125,19 @@ export default function Layout() {
               <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-faint text-[10px]">▼</div>
             </div>
           )}
-
           <div className="flex items-center gap-2">
-            <button onClick={()=>mudarMes(-1)}
-              className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
+            <button onClick={()=>mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
             <span className="text-sm font-semibold text-ink min-w-[110px] text-center">{MESES[mes]} / {ano}</span>
-            <button onClick={()=>mudarMes(1)}
-              className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
+            <button onClick={()=>mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
           </div>
-
           <SinoNotificacoes />
-
           {isGestor && (
-            <button onClick={()=>navigate('/empresas/nova')}
-              className="btn gap-1.5 text-white border-0"
+            <button onClick={()=>navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
               style={{background: id.corPrimaria}}>
               <span className="text-base leading-none">+</span> Nova Empresa
             </button>
           )}
         </header>
-
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet context={{ competencia, mes, ano }} />
         </main>
