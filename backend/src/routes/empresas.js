@@ -12,6 +12,8 @@ router.get('/', async (req, res) => {
     const { responsavelId, nivel, tipo, semMovimento, temFuncionarios,
             temProLabore, enviaReinf, fatorR, incluirSaiu } = req.query;
     const where = { ativa: true, escritorioId: req.user.escritorioId };
+
+    // OPERADOR só vê as suas, GESTOR/ADMIN vê todas
     if (req.user.nivel === 'OPERADOR') {
       where.responsavelId = req.user.id;
       where.saiuDoEscritorio = false;
@@ -19,6 +21,7 @@ router.get('/', async (req, res) => {
       if (!incluirSaiu || incluirSaiu === 'false') where.saiuDoEscritorio = false;
       if (responsavelId) where.responsavelId = responsavelId;
     }
+
     if (nivel) where.nivel = nivel;
     if (tipo) where.tipo = tipo;
     if (semMovimento !== undefined) where.semMovimento = semMovimento === 'true';
@@ -26,6 +29,7 @@ router.get('/', async (req, res) => {
     if (temProLabore !== undefined) where.temProLabore = temProLabore === 'true';
     if (enviaReinf !== undefined) where.enviaReinf = enviaReinf === 'true';
     if (fatorR !== undefined) where.fatorR = fatorR === 'true';
+
     const empresas = await prisma.empresa.findMany({
       where,
       include: {
@@ -112,7 +116,6 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
     dados.prazoEntrega = !dados.prazoEntrega ? null : Number(dados.prazoEntrega) || null;
     if (dados.responsavelId === '') dados.responsavelId = null;
     if (dados.matrizId === '') dados.matrizId = null;
-    // Remove campos que não existem no model
     delete dados.escritorioId;
     const empresa = await prisma.empresa.update({
       where: { id: req.params.id },
@@ -137,6 +140,36 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
       }
     }
     res.json(empresa);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Edição em lote de campos
+router.post('/editar-lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const { ids, campos } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ error: 'Nenhuma empresa selecionada.' });
+    }
+    // Campos permitidos para edição em lote
+    const camposPermitidos = [
+      'temFuncionarios', 'temProLabore', 'semMovimento', 'enviaReinf',
+      'fatorR', 'participaTarefas', 'nivel', 'tipo', 'enquadramento',
+      'responsavelId', 'prazoEntrega'
+    ];
+    const dadosLimpos = {};
+    for (const [k, v] of Object.entries(campos)) {
+      if (camposPermitidos.includes(k)) dadosLimpos[k] = v;
+    }
+    if (Object.keys(dadosLimpos).length === 0) {
+      return res.status(400).json({ error: 'Nenhum campo válido para editar.' });
+    }
+    await prisma.empresa.updateMany({
+      where: { id: { in: ids }, escritorioId: req.user.escritorioId },
+      data: dadosLimpos
+    });
+    res.json({ ok: true, total: ids.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
