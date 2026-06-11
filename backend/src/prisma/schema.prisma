@@ -73,30 +73,47 @@ enum TipoTarefa {
   PONTUAL
 }
 
+enum TipoNotificacao {
+  REAJUSTE_APLICADO
+  GERAL
+}
+
 model Escritorio {
-  id        String    @id @default(cuid())
-  nome      String
-  ativo     Boolean   @default(true)
-  criadoEm  DateTime  @default(now())
-  usuarios  Usuario[]
-  empresas  Empresa[]
+  id         String    @id @default(cuid())
+  nome       String
+  ativo      Boolean   @default(true)
+  criadoEm   DateTime  @default(now())
+  usuarios   Usuario[]
+  empresas   Empresa[]
   sindicatos Sindicato[]
 }
 
 model Usuario {
-  id           String      @id @default(cuid())
-  escritorioId String
-  escritorio   Escritorio  @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
-  nome         String
-  email        String      @unique
-  senha        String
-  nivel        NivelAcesso @default(OPERADOR)
-  ativo        Boolean     @default(true)
-  criadoEm     DateTime    @default(now())
-  empresas     Empresa[]   @relation("ResponsavelEmpresa")
-  historicos   HistoricoMensal[]
-  eventos      EventoAgenda[]
-  resets       ResetSenha[]
+  id             String          @id @default(cuid())
+  escritorioId   String
+  escritorio     Escritorio      @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
+  nome           String
+  email          String          @unique
+  senha          String
+  nivel          NivelAcesso     @default(OPERADOR)
+  ativo          Boolean         @default(true)
+  criadoEm       DateTime        @default(now())
+  empresas       Empresa[]       @relation("ResponsavelEmpresa")
+  historicos     HistoricoMensal[]
+  eventos        EventoAgenda[]
+  resets         ResetSenha[]
+  notificacoes   Notificacao[]
+}
+
+model Notificacao {
+  id         String          @id @default(cuid())
+  usuarioId  String
+  usuario    Usuario         @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  tipo       TipoNotificacao @default(GERAL)
+  titulo     String
+  mensagem   String
+  lida       Boolean         @default(false)
+  criadoEm   DateTime        @default(now())
 }
 
 model ResetSenha {
