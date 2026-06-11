@@ -73,18 +73,30 @@ enum TipoTarefa {
   PONTUAL
 }
 
+model Escritorio {
+  id        String    @id @default(cuid())
+  nome      String
+  ativo     Boolean   @default(true)
+  criadoEm  DateTime  @default(now())
+  usuarios  Usuario[]
+  empresas  Empresa[]
+  sindicatos Sindicato[]
+}
+
 model Usuario {
-  id         String          @id @default(cuid())
-  nome       String
-  email      String          @unique
-  senha      String
-  nivel      NivelAcesso     @default(OPERADOR)
-  ativo      Boolean         @default(true)
-  criadoEm   DateTime        @default(now())
-  empresas   Empresa[]       @relation("ResponsavelEmpresa")
-  historicos HistoricoMensal[]
-  eventos    EventoAgenda[]
-  resets     ResetSenha[]
+  id           String      @id @default(cuid())
+  escritorioId String
+  escritorio   Escritorio  @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
+  nome         String
+  email        String      @unique
+  senha        String
+  nivel        NivelAcesso @default(OPERADOR)
+  ativo        Boolean     @default(true)
+  criadoEm     DateTime    @default(now())
+  empresas     Empresa[]   @relation("ResponsavelEmpresa")
+  historicos   HistoricoMensal[]
+  eventos      EventoAgenda[]
+  resets       ResetSenha[]
 }
 
 model ResetSenha {
@@ -98,19 +110,25 @@ model ResetSenha {
 }
 
 model Sindicato {
-  id          String             @id @default(cuid())
-  nome        String             @unique
-  dataBase    String
-  observacoes String?
-  ativo       Boolean            @default(true)
-  criadoEm    DateTime           @default(now())
-  controles   ControleSindical[]
+  id           String             @id @default(cuid())
+  escritorioId String
+  escritorio   Escritorio         @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
+  nome         String
+  dataBase     String
+  observacoes  String?
+  ativo        Boolean            @default(true)
+  criadoEm     DateTime           @default(now())
+  controles    ControleSindical[]
+
+  @@unique([escritorioId, nome])
 }
 
 model Empresa {
   id                String            @id @default(cuid())
+  escritorioId      String
+  escritorio        Escritorio        @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
   razaoSocial       String
-  cnpj              String            @unique
+  cnpj              String
   tipoDocumento     TipoDocumento     @default(CNPJ)
   enquadramento     Enquadramento
   anexoSimples      AnexoSimples?
@@ -123,7 +141,7 @@ model Empresa {
   temFilial         Boolean           @default(false)
   fatorR            Boolean           @default(false)
   enviaReinf        Boolean           @default(false)
-  participaTarefas  Boolean           @default(true)
+  participaTarefas  Boolean           @default(false)
   observacoes       String?
   ativa             Boolean           @default(true)
   saiuDoEscritorio  Boolean           @default(false)
@@ -138,6 +156,8 @@ model Empresa {
   sindical          ControleSindical?
   gruposTarefa      GrupoTarefa[]
   eventos           EventoAgenda[]
+
+  @@unique([escritorioId, cnpj])
 }
 
 model Filial {
