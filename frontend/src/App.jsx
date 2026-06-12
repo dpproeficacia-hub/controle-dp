@@ -13,6 +13,7 @@ import Identidade from './pages/Identidade';
 import Importacao from './pages/Importacao';
 import Agenda from './pages/Agenda';
 import Tarefas from './pages/Tarefas';
+import Relatorio from './pages/Relatorio';
 
 function Protegido({ children }) {
   const { usuario, carregando } = useAuth();
@@ -47,6 +48,7 @@ export default function App() {
             <Route path="importacao" element={<Importacao />} />
             <Route path="agenda" element={<Agenda />} />
             <Route path="tarefas" element={<Tarefas />} />
+            <Route path="relatorio" element={<Relatorio />} />
           </Route>
         </Routes>
       </BrowserRouter>
