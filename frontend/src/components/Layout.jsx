@@ -75,11 +75,14 @@ export default function Layout() {
           <NI to="/dashboard">Dashboard</NI>
           <NI to="/mensal">Controle Mensal</NI>
           <NI to="/empresas">Empresas</NI>
+
           <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Controles</p>
           <NI to="/sindical">Sindical / CCT</NI>
           <NI to="/tarefas">Tarefas</NI>
           <NI to="/agenda">Agenda</NI>
+          <NI to="/relatorio">Relatórios</NI>
           {isGestor && <NI to="/responsaveis">Responsáveis</NI>}
+
           {isAdmin && (
             <>
               <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
