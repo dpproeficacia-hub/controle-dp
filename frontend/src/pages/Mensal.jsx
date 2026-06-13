@@ -16,11 +16,7 @@ const BOLINHA = {
 function Bolinha({ tipo }) {
   if (!tipo) return null;
   const b = BOLINHA[tipo];
-  return (
-    <span
-      title={b.title}
-      className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${b.bg}`} />
-  );
+  return <span title={b.title} className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${b.bg}`} />;
 }
 
 export default function Mensal() {
@@ -37,9 +33,7 @@ export default function Mensal() {
   const diaHoje = new Date().getDate();
   const JANELA_DIAS = 20;
 
-  useEffect(() => {
-    carregar();
-  }, [competencia, filtroResponsavel]);
+  useEffect(() => { carregar(); }, [competencia, filtroResponsavel]);
 
   function carregar() {
     setLoading(true);
@@ -52,23 +46,25 @@ export default function Mensal() {
       .finally(() => setLoading(false));
   }
 
-  // Empresas visíveis na janela de 20 dias:
-  // Aparece se: tem tarefa pendente com vencimento <= (hoje + 20) OU tem tarefa em atraso
   function dentroDaJanela(emp) {
-    if (!emp.participaTarefas) return false;
     if (emp._totalGrupos === 0) return false;
     if (emp.historico?.status === 'FINALIZADO') return false;
-    if (emp._bolinha === 'vermelho') return true; // atraso sempre aparece
+    if (emp._bolinha === 'vermelho') return true;
     if (emp._diaVencimentoMinimo === null) return false;
     return emp._diaVencimentoMinimo <= diaHoje + JANELA_DIAS;
   }
 
   const filtradas = empresas.filter(e => {
+    // Só mostra empresas que têm pelo menos 1 tarefa cadastrada
+    if (e._totalGrupos === 0) return false;
+
     const matchTipo =
       filtroTipo === 'TODAS' ||
+      // CORRIGIDO: cada filtro é independente — não exclui por outras condições
       (filtroTipo === 'FUNCIONARIOS' && e.temFuncionarios) ||
-      (filtroTipo === 'PROLABORE' && e.temProLabore && !e.temFuncionarios) ||
-      (filtroTipo === 'SEM_MOVIMENTO' && e.semMovimento && !e.temFuncionarios && !e.temProLabore);
+      (filtroTipo === 'PROLABORE' && e.temProLabore) ||
+      (filtroTipo === 'SEM_MOVIMENTO' && e.semMovimento);
+
     const matchStatus = filtroStatus === 'TODOS' || e.historico?.status === filtroStatus;
     const matchBolinha = filtroBolinha === 'TODOS' || e._bolinha === filtroBolinha;
     const matchBusca = !busca || e.razaoSocial.toLowerCase().includes(busca.toLowerCase()) || e.cnpj.includes(busca);
@@ -76,35 +72,34 @@ export default function Mensal() {
   });
 
   const tiposFiltro = [
-    { key: 'TODAS', label: 'Todas' },
+    { key: 'TODAS',        label: 'Todas' },
     { key: 'FUNCIONARIOS', label: 'Com funcionários' },
-    { key: 'PROLABORE', label: 'Pró-labore' },
-    { key: 'SEM_MOVIMENTO', label: 'Sem movimento' },
+    { key: 'PROLABORE',    label: 'Pró-labore' },
+    { key: 'SEM_MOVIMENTO',label: 'Sem movimento' },
   ];
 
   const statusFiltro = [
-    { key: 'TODOS', label: 'Todos os status' },
+    { key: 'TODOS',        label: 'Todos os status' },
     { key: 'NAO_INICIADO', label: 'Não iniciado' },
-    { key: 'PARCIAL', label: 'Em andamento' },
-    { key: 'FINALIZADO', label: 'Finalizado' },
+    { key: 'PARCIAL',      label: 'Em andamento' },
+    { key: 'FINALIZADO',   label: 'Finalizado' },
   ];
 
   const bolinhaFiltro = [
-    { key: 'TODOS', label: 'Todas urgências' },
+    { key: 'TODOS',    label: 'Todas urgências' },
     { key: 'vermelho', label: '🔴 Em atraso' },
     { key: 'laranja',  label: '🟠 Próximo vencimento' },
     { key: 'azul',     label: '🔵 No prazo' },
   ];
 
-  // Contagens para os KPIs rápidos
-  const totalJanela = empresas.filter(dentroDaJanela).length;
-  const emAtraso = empresas.filter(e => e._bolinha === 'vermelho').length;
-  const proximoVenc = empresas.filter(e => e._bolinha === 'laranja').length;
+  const emAtraso    = empresas.filter(e => e._totalGrupos > 0 && e._bolinha === 'vermelho').length;
+  const proximoVenc = empresas.filter(e => e._totalGrupos > 0 && e._bolinha === 'laranja').length;
+  const totalJanela = empresas.filter(e => e._totalGrupos > 0 && dentroDaJanela(e)).length;
 
   return (
     <div>
-      {/* KPIs rápidos da janela de 20 dias */}
-      {(totalJanela > 0 || emAtraso > 0) && (
+      {/* KPIs rápidos */}
+      {(emAtraso > 0 || proximoVenc > 0 || totalJanela > 0) && (
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
             onClick={() => setFiltroBolinha(filtroBolinha === 'vermelho' ? 'TODOS' : 'vermelho')}>
@@ -163,6 +158,11 @@ export default function Mensal() {
       ) : filtradas.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-muted text-sm">Nenhuma empresa encontrada.</p>
+          {empresas.filter(e => e._totalGrupos === 0).length > 0 && (
+            <p className="text-xs text-faint mt-2">
+              {empresas.filter(e => e._totalGrupos === 0).length} empresa(s) sem tarefas cadastradas não são exibidas.
+            </p>
+          )}
         </div>
       ) : (
         <div className="card overflow-hidden">
@@ -180,7 +180,6 @@ export default function Mensal() {
                 const total = emp._totalGrupos || 0;
                 const entregues = emp._entregues || 0;
                 const pct = total ? Math.round((entregues / total) * 100) : 0;
-                const naJanela = dentroDaJanela(emp);
 
                 return (
                   <tr key={emp.id}
@@ -196,7 +195,11 @@ export default function Mensal() {
                       )}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">
-                      {emp.temFuncionarios ? 'Com funcionários' : emp.temProLabore ? 'Pró-labore' : emp.semMovimento ? 'Sem movimento' : 'Outros'}
+                      {emp.temFuncionarios && emp.temProLabore ? 'Func. + Pró-labore'
+                        : emp.temFuncionarios ? 'Com funcionários'
+                        : emp.temProLabore ? 'Pró-labore'
+                        : emp.semMovimento ? 'Sem movimento'
+                        : 'Outros'}
                     </td>
                     <td className="px-4 py-3 text-xs text-muted">{emp.responsavel?.nome || '—'}</td>
                     <td className="px-4 py-3">
@@ -209,27 +212,22 @@ export default function Mensal() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {/* Bolinha de urgência */}
                         {status !== 'FINALIZADO' && emp._bolinha && (
                           <Bolinha tipo={emp._bolinha} />
                         )}
                         {status === 'FINALIZADO' && (
                           <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" title="Concluído" />
                         )}
-                        {total > 0 ? (
-                          <div className="flex items-center gap-1.5 flex-1">
-                            <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden min-w-[50px]">
-                              <div className="h-full rounded-full transition-all"
-                                style={{
-                                  width: `${pct}%`,
-                                  background: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D'
-                                }} />
-                            </div>
-                            <span className="text-xs text-faint w-7 text-right">{pct}%</span>
+                        <div className="flex items-center gap-1.5 flex-1">
+                          <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden min-w-[50px]">
+                            <div className="h-full rounded-full transition-all"
+                              style={{
+                                width: `${pct}%`,
+                                background: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D'
+                              }} />
                           </div>
-                        ) : (
-                          <span className="text-xs text-faint">sem tarefas</span>
-                        )}
+                          <span className="text-xs text-faint w-7 text-right">{pct}%</span>
+                        </div>
                       </div>
                     </td>
                   </tr>
