@@ -12,7 +12,13 @@ router.get('/:competencia', async (req, res) => {
     const { competencia } = req.params;
     const { status, responsavelId } = req.query;
 
-    const whereEmpresa = { ativa: true, saiuDoEscritorio: false };
+    const whereEmpresa = {
+      ativa: true,
+      saiuDoEscritorio: false,
+      escritorioId: req.user.escritorioId,
+      participaTarefas: true  // só empresas que participam do controle de tarefas
+    };
+
     if (req.user.nivel === 'OPERADOR') whereEmpresa.responsavelId = req.user.id;
     else if (responsavelId) whereEmpresa.responsavelId = responsavelId;
 
@@ -44,27 +50,18 @@ router.get('/:competencia', async (req, res) => {
 
     const resultado = empresas.map(emp => {
       const historico = emp.historicos[0] || null;
-      const totalGrupos = emp.participaTarefas ? emp.gruposTarefa.length : 0;
+      const totalGrupos = emp.gruposTarefa.length;
       const entregasGrupo = historico?.entregasGrupo || [];
       const concluidos = entregasGrupo.filter(eg => eg.entregue || eg.dispensada).length;
 
-      // IDs dos grupos já concluídos
       const gruposConcluidosIds = new Set(
         entregasGrupo.filter(eg => eg.entregue || eg.dispensada).map(eg => eg.grupoId)
       );
-
-      // Tarefas pendentes (não concluídas)
       const gruposPendentes = emp.gruposTarefa.filter(g => !gruposConcluidosIds.has(g.id));
-
-      // Menor dia de vencimento entre as tarefas pendentes
       const diaVencimentoMinimo = gruposPendentes.length > 0
         ? Math.min(...gruposPendentes.map(g => g.diaVencimento))
         : null;
 
-      // Calcula a bolinha
-      // 🔴 Vermelho: passou do prazo (dia vencimento < hoje) e ainda pendente
-      // 🟠 Laranja: faltam 3 dias ou menos (dia vencimento - hoje <= 3 e >= 0)
-      // 🔵 Azul: dentro do prazo normal
       let bolinha = null;
       if (diaVencimentoMinimo !== null && concluidos < totalGrupos) {
         const diasRestantes = diaVencimentoMinimo - diaHoje;
@@ -98,14 +95,13 @@ router.get('/:competencia', async (req, res) => {
       };
     });
 
-    // Ordenação: alfabética, depois por prazo de entrega (sem prazo vai pro fim)
+    // Ordenação: por prazo de entrega, sem prazo no fim, alfabético como critério secundário
     resultado.sort((a, b) => {
-      const nomeComp = a.razaoSocial.localeCompare(b.razaoSocial, 'pt-BR');
-      if (a.prazoEntrega === null && b.prazoEntrega === null) return nomeComp;
+      if (a.prazoEntrega === null && b.prazoEntrega === null) return a.razaoSocial.localeCompare(b.razaoSocial, 'pt-BR');
       if (a.prazoEntrega === null) return 1;
       if (b.prazoEntrega === null) return -1;
       if (a.prazoEntrega !== b.prazoEntrega) return a.prazoEntrega - b.prazoEntrega;
-      return nomeComp;
+      return a.razaoSocial.localeCompare(b.razaoSocial, 'pt-BR');
     });
 
     const filtrado = status ? resultado.filter(e => e.historico.status === status) : resultado;
