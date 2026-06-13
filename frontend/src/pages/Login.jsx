@@ -51,20 +51,27 @@ function TelaLogin({ onEsqueceu, onCadastrar }) {
         <div>
           <label className="label">Email</label>
           <input className="input" type="email" value={email}
-            onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required autoFocus />
+            onChange={e => setEmail(e.target.value)}
+            placeholder="seu@email.com" required autoFocus />
         </div>
         <div>
           <label className="label">Senha</label>
           <input className="input" type="password" value={senha}
-            onChange={e => setSenha(e.target.value)} placeholder="••••••••" required />
+            onChange={e => setSenha(e.target.value)}
+            placeholder="••••••••" required />
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>}
+        {erro && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>
+        )}
         <button type="submit" disabled={loading} className="btn btn-primary w-full justify-center py-2.5">
-          {loading ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : 'Entrar'}
+          {loading
+            ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+            : 'Entrar'}
         </button>
       </form>
       <div className="mt-4 text-center">
-        <button onClick={() => onEsqueceu(email)} className="text-xs text-muted hover:text-ink underline">
+        <button onClick={() => onEsqueceu(email)}
+          className="text-xs text-muted hover:text-ink underline">
           Esqueci minha senha
         </button>
       </div>
@@ -105,7 +112,9 @@ function TelaCadastro({ onVoltar }) {
 
   return (
     <div className="card p-6">
-      <button onClick={onVoltar} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-4">← Voltar</button>
+      <button onClick={onVoltar} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-4">
+        ← Voltar
+      </button>
       <h2 className="font-display font-bold text-lg text-ink mb-1">Criar conta gratuita</h2>
       <p className="text-sm text-muted mb-5">Configure seu escritório e comece a usar agora</p>
       <form onSubmit={handleSubmit} className="space-y-3">
@@ -120,12 +129,14 @@ function TelaCadastro({ onVoltar }) {
         <div>
           <label className="label">Seu nome</label>
           <input className="input" required value={form.nome}
-            onChange={e => set('nome', e.target.value)} placeholder="Nome completo" />
+            onChange={e => set('nome', e.target.value)}
+            placeholder="Nome completo" />
         </div>
         <div>
           <label className="label">Email</label>
           <input className="input" type="email" required value={form.email}
-            onChange={e => set('email', e.target.value)} placeholder="seu@email.com" />
+            onChange={e => set('email', e.target.value)}
+            placeholder="seu@email.com" />
         </div>
         <div>
           <label className="label">Senha</label>
@@ -148,7 +159,9 @@ function TelaCadastro({ onVoltar }) {
             <p className="text-xs text-red-500 mt-1">As senhas não coincidem</p>
           )}
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>}
+        {erro && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>
+        )}
         <button type="submit" disabled={loading || form.senha !== form.confirmar}
           className="btn btn-primary w-full justify-center py-2.5 disabled:opacity-50 mt-2">
           {loading
@@ -189,15 +202,20 @@ function TelaSolicitarCodigo({ emailInicial, onCodigo, onVoltar }) {
         </div>
         <h2 className="font-display font-bold text-lg text-ink">Código gerado</h2>
       </div>
-      <p className="text-sm text-muted mb-4">Olá, <strong className="text-ink">{resultado.nome}</strong>. Seu código:</p>
+      <p className="text-sm text-muted mb-4">
+        Olá, <strong className="text-ink">{resultado.nome}</strong>. Seu código:
+      </p>
       <div className="bg-surface2 border border-border rounded-xl p-4 text-center mb-4">
         <p className="text-3xl font-mono font-bold text-ink tracking-[0.3em]">{resultado.codigo}</p>
         <p className="text-xs text-faint mt-2">Válido por 15 minutos</p>
       </div>
       <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-5">
-        <p className="text-xs text-amber-700"><strong>Atenção:</strong> guarde este código antes de continuar.</p>
+        <p className="text-xs text-amber-700">
+          <strong>Atenção:</strong> guarde este código antes de continuar.
+        </p>
       </div>
-      <button onClick={() => onCodigo(email, resultado.codigo)} className="btn btn-primary w-full justify-center py-2.5">
+      <button onClick={() => onCodigo(email, resultado.codigo)}
+        className="btn btn-primary w-full justify-center py-2.5">
         Continuar para redefinir senha
       </button>
     </div>
@@ -205,18 +223,25 @@ function TelaSolicitarCodigo({ emailInicial, onCodigo, onVoltar }) {
 
   return (
     <div className="card p-6">
-      <button onClick={onVoltar} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-4">← Voltar</button>
+      <button onClick={onVoltar} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-4">
+        ← Voltar
+      </button>
       <h2 className="font-display font-bold text-lg text-ink mb-1">Recuperar acesso</h2>
       <p className="text-sm text-muted mb-5">Informe seu email para receber o código de verificação.</p>
       <form onSubmit={solicitar} className="space-y-4">
         <div>
           <label className="label">Email cadastrado</label>
           <input className="input" type="email" value={email}
-            onChange={e => setEmail(e.target.value)} placeholder="seu@email.com" required autoFocus />
+            onChange={e => setEmail(e.target.value)}
+            placeholder="seu@email.com" required autoFocus />
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>}
+        {erro && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>
+        )}
         <button type="submit" disabled={loading} className="btn btn-primary w-full justify-center py-2.5">
-          {loading ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : 'Gerar código'}
+          {loading
+            ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+            : 'Gerar código'}
         </button>
       </form>
     </div>
@@ -265,14 +290,19 @@ function TelaNovaSenha({ email, codigoInicial, onVoltar }) {
 
   return (
     <div className="card p-6">
-      <button onClick={onVoltar} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-4">← Voltar</button>
+      <button onClick={onVoltar} className="flex items-center gap-1.5 text-xs text-muted hover:text-ink mb-4">
+        ← Voltar
+      </button>
       <h2 className="font-display font-bold text-lg text-ink mb-1">Redefinir senha</h2>
-      <p className="text-sm text-muted mb-5">Digite o código e escolha uma nova senha para <strong className="text-ink">{email}</strong>.</p>
+      <p className="text-sm text-muted mb-5">
+        Digite o código e escolha uma nova senha para <strong className="text-ink">{email}</strong>.
+      </p>
       <form onSubmit={redefinir} className="space-y-4">
         <div>
           <label className="label">Código de verificação</label>
           <input className="input text-center font-mono tracking-widest text-lg"
-            value={codigo} onChange={e => setCodigo(e.target.value.replace(/\D/g,'').slice(0,6))}
+            value={codigo}
+            onChange={e => setCodigo(e.target.value.replace(/\D/g,'').slice(0,6))}
             placeholder="000000" maxLength={6} required autoFocus />
         </div>
         <div>
@@ -292,12 +322,18 @@ function TelaNovaSenha({ email, codigoInicial, onVoltar }) {
           <input className="input" type={mostrarSenha ? 'text' : 'password'}
             value={confirmar} onChange={e => setConfirmar(e.target.value)}
             placeholder="Repita a senha" required />
-          {confirmar && novaSenha !== confirmar && <p className="text-xs text-red-500 mt-1">As senhas não coincidem</p>}
+          {confirmar && novaSenha !== confirmar && (
+            <p className="text-xs text-red-500 mt-1">As senhas não coincidem</p>
+          )}
         </div>
-        {erro && <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>}
+        {erro && (
+          <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">{erro}</div>
+        )}
         <button type="submit" disabled={loading || novaSenha !== confirmar}
           className="btn btn-primary w-full justify-center py-2.5 disabled:opacity-50">
-          {loading ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : 'Redefinir senha'}
+          {loading
+            ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+            : 'Redefinir senha'}
         </button>
       </form>
     </div>
