@@ -3,9 +3,9 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const ESCOPO_OPTS = [
-  { key: 'todas',     label: 'Todas as empresas' },
-  { key: 'uma',       label: 'Uma empresa específica' },
-  { key: 'selecionar',label: 'Empresas selecionadas' },
+  { key: 'todas',      label: 'Todas as empresas' },
+  { key: 'uma',        label: 'Uma empresa específica' },
+  { key: 'selecionar', label: 'Empresas selecionadas' },
 ];
 
 const FILTROS_TIPO = [
@@ -29,7 +29,7 @@ const ANOS = Array.from({ length: 6 }, (_, i) => anoAtual - 1 + i);
 
 const formVazio = {
   nome: '', diaVencimento: '', tipo: 'RECORRENTE',
-  inicioMes: '', inicioAno: '',
+  inicioMes: '', inicioAno: '', isDiaUtil: false,
   escopo: 'todas', empresaId: '', empresasIds: [], subtarefas: [],
 };
 
@@ -77,12 +77,12 @@ export default function Tarefas() {
     const matchBusca = !buscaEmpresaForm ||
       emp.razaoSocial.toLowerCase().includes(buscaEmpresaForm.toLowerCase());
     const matchTipo =
-      filtroTipoEmpresa === 'todas'        ? true :
-      filtroTipoEmpresa === 'funcionarios' ? emp.temFuncionarios :
-      filtroTipoEmpresa === 'proLabore'    ? emp.temProLabore :
-      filtroTipoEmpresa === 'soProLabore'  ? (emp.temProLabore && !emp.temFuncionarios) :
-      filtroTipoEmpresa === 'semMovimento' ? emp.semMovimento :
-      filtroTipoEmpresa === 'reinf'        ? emp.enviaReinf : true;
+      filtroTipoEmpresa === 'todas'         ? true :
+      filtroTipoEmpresa === 'funcionarios'  ? emp.temFuncionarios :
+      filtroTipoEmpresa === 'proLabore'     ? emp.temProLabore :
+      filtroTipoEmpresa === 'soProLabore'   ? (emp.temProLabore && !emp.temFuncionarios) :
+      filtroTipoEmpresa === 'semMovimento'  ? emp.semMovimento :
+      filtroTipoEmpresa === 'reinf'         ? emp.enviaReinf : true;
     return matchBusca && matchTipo;
   });
 
@@ -105,7 +105,7 @@ export default function Tarefas() {
     }
     setForm({
       nome: g.nome, diaVencimento: g.diaVencimento, tipo: g.tipo,
-      inicioMes, inicioAno,
+      inicioMes, inicioAno, isDiaUtil: g.isDiaUtil || false,
       escopo: 'uma', empresaId: g.empresaId, empresasIds: [],
       subtarefas: (g.subtarefas || []).map(s => ({ nome: s.nome, temValor: s.temValor })),
     });
@@ -168,9 +168,13 @@ export default function Tarefas() {
     setSalvando(true);
     try {
       const payload = {
-        nome: form.nome, diaVencimento: Number(form.diaVencimento),
-        tipo: form.tipo, inicioCobrancaEm,
-        subtarefas: form.subtarefas, empresaIds,
+        nome: form.nome,
+        diaVencimento: Number(form.diaVencimento),
+        isDiaUtil: form.isDiaUtil || false,
+        tipo: form.tipo,
+        inicioCobrancaEm,
+        subtarefas: form.subtarefas,
+        empresaIds,
       };
       if (editandoId) {
         await api.put(`/grupos/${editandoId}`, payload);
@@ -229,13 +233,30 @@ export default function Tarefas() {
                   onChange={e => setForm(f => ({ ...f, nome: e.target.value }))}
                   placeholder="Ex: FGTS Digital, Folha de Pagamento..." />
               </div>
-              <div>
-                <label className="label">Dia de vencimento</label>
-                <input className="input" type="number" min="1" max="31" required
-                  value={form.diaVencimento}
-                  onChange={e => setForm(f => ({ ...f, diaVencimento: e.target.value }))}
-                  placeholder="Ex: 7" />
+
+              {/* Dia de vencimento + toggle dia útil */}
+              <div className="col-span-2">
+                <label className="label">
+                  {form.isDiaUtil ? 'Nº dia útil de vencimento' : 'Dia de vencimento'}
+                </label>
+                <div className="flex gap-2 items-center">
+                  <input className="input flex-1" type="number" min="1" max="31" required
+                    value={form.diaVencimento}
+                    onChange={e => setForm(f => ({ ...f, diaVencimento: e.target.value }))}
+                    placeholder={form.isDiaUtil ? 'Ex: 5 (5º dia útil)' : 'Ex: 7'} />
+                  <div
+                    onClick={() => setForm(f => ({ ...f, isDiaUtil: !f.isDiaUtil }))}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer select-none transition-all flex-shrink-0 text-xs font-semibold ${form.isDiaUtil ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+                    {form.isDiaUtil ? '✓ Dia útil' : 'Dia útil?'}
+                  </div>
+                </div>
+                <p className="text-xs text-faint mt-1">
+                  {form.isDiaUtil
+                    ? `O sistema calculará automaticamente qual é o ${form.diaVencimento || 'N'}º dia útil (Seg–Sáb) de cada mês, considerando feriados da cidade da empresa`
+                    : 'Dia fixo do mês'}
+                </p>
               </div>
+
               <div>
                 <label className="label">Tipo</label>
                 <select className="select" value={form.tipo}
@@ -244,6 +265,7 @@ export default function Tarefas() {
                   <option value="PONTUAL">Pontual (uma vez)</option>
                 </select>
               </div>
+
               <div className="col-span-2">
                 <label className="label">
                   Início de cobrança
@@ -293,7 +315,6 @@ export default function Tarefas() {
                   ))}
                 </div>
 
-                {/* Filtros de tipo — aparecem nos modos "uma" e "selecionar" */}
                 {(form.escopo === 'uma' || form.escopo === 'selecionar') && (
                   <div className="flex gap-1.5 flex-wrap mb-2">
                     {FILTROS_TIPO.map(f => (
@@ -323,8 +344,7 @@ export default function Tarefas() {
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
                       <input className="input flex-1 text-xs h-8 mr-2" placeholder="Buscar empresa..."
-                        value={buscaEmpresaForm}
-                        onChange={e => setBuscaEmpresaForm(e.target.value)} />
+                        value={buscaEmpresaForm} onChange={e => setBuscaEmpresaForm(e.target.value)} />
                       <button type="button" onClick={toggleTodasFiltradas}
                         className="text-xs text-blue-600 hover:underline flex-shrink-0">
                         {todasFiltradasSelecionadas ? 'Desmarcar' : 'Selecionar todas'}
@@ -354,6 +374,7 @@ export default function Tarefas() {
                                 {emp.temProLabore && emp.temFuncionarios && <span className="text-[10px] text-purple-600">pró-labore</span>}
                                 {emp.semMovimento && <span className="text-[10px] text-gray-500">sem movimento</span>}
                                 {emp.enviaReinf && <span className="text-[10px] text-green-600">REINF</span>}
+                                {emp.cidade && <span className="text-[10px] text-faint">{emp.cidade}/{emp.estado}</span>}
                               </div>
                             </div>
                             {form.empresasIds.includes(emp.id) && (
@@ -421,6 +442,7 @@ export default function Tarefas() {
       ) : grupos.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-muted text-sm">Nenhuma tarefa cadastrada.</p>
+          <p className="text-faint text-xs mt-1">Clique em "+ Nova tarefa" para começar.</p>
         </div>
       ) : (
         <>
@@ -438,7 +460,12 @@ export default function Tarefas() {
                   <tr key={g.id} className="border-b border-border last:border-b-0 hover:bg-surface2">
                     <td className="px-4 py-3 text-sm font-semibold text-ink">{g.nome}</td>
                     <td className="px-4 py-3 text-sm text-muted max-w-[180px] truncate" title={g.empresa?.razaoSocial}>{g.empresa?.razaoSocial || '—'}</td>
-                    <td className="px-4 py-3 text-sm text-muted">Dia {g.diaVencimento}</td>
+                    <td className="px-4 py-3">
+                      <p className="text-sm text-muted">
+                        {g.isDiaUtil ? `${g.diaVencimento}º dia útil` : `Dia ${g.diaVencimento}`}
+                      </p>
+                      {g.isDiaUtil && <p className="text-[10px] text-blue-600">Seg–Sáb</p>}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={`pill ${g.tipo === 'RECORRENTE' ? 'pill-blue' : 'pill-amber'} text-[10px]`}>
                         {g.tipo === 'RECORRENTE' ? 'Recorrente' : 'Pontual'}
