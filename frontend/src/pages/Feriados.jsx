@@ -16,9 +16,8 @@ const FERIADOS_NACIONAIS = [
   { dia: 2,  mes: 11, nome: 'Finados' },
   { dia: 15, mes: 11, nome: 'Proclamação da República' },
   { dia: 25, mes: 12, nome: 'Natal' },
-  { dia: null, mes: null, nome: 'Carnaval (2ª e 3ª) — móvel' },
-  { dia: null, mes: null, nome: 'Sexta-feira Santa — móvel' },
-  { dia: null, mes: null, nome: 'Corpus Christi — móvel' },
+  { dia: null, mes: null, nome: 'Sexta-feira Santa — calculada automaticamente' },
+  { dia: null, mes: null, nome: 'Corpus Christi — calculado automaticamente' },
 ];
 
 const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
@@ -87,7 +86,6 @@ export default function Feriados() {
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
 
-  // Agrupa feriados por cidade
   const porCidade = feriados.reduce((acc, f) => {
     const key = f.cidade && f.estado
       ? `${f.cidade} - ${f.estado}`
@@ -113,7 +111,6 @@ export default function Feriados() {
         )}
       </div>
 
-      {/* Formulário */}
       {mostraForm && isGestor && (
         <form onSubmit={salvar} className="card p-5 mb-6 max-w-xl">
           <p className="text-sm font-semibold text-ink mb-4">
@@ -188,7 +185,6 @@ export default function Feriados() {
       )}
 
       <div className="grid grid-cols-[1fr_300px] gap-4 items-start">
-        {/* Feriados cadastrados */}
         <div>
           {loading ? (
             <div className="flex items-center justify-center h-32 text-muted text-sm">Carregando...</div>
@@ -242,7 +238,6 @@ export default function Feriados() {
           )}
         </div>
 
-        {/* Sidebar — feriados nacionais */}
         <div className="card">
           <div className="card-header cursor-pointer" onClick={() => setMostraNacionais(!mostraNacionais)}>
             <span className="card-title">Feriados nacionais</span>
