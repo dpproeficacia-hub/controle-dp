@@ -6,6 +6,7 @@ import api from '../lib/api';
 const NIVEL_BG = { N1:'bg-ink text-bg', N2:'bg-red-100 text-red-800', N3:'bg-amber-100 text-amber-800', N4:'bg-blue-100 text-blue-800', N5:'bg-green-100 text-green-800' };
 const LABEL_ENQ = { SIMPLES_NACIONAL:'Simples', LUCRO_PRESUMIDO:'L. Presumido', LUCRO_REAL:'L. Real', MEI:'MEI', CEI:'CEI', DOMESTICA:'Doméstica', PRODUTOR_RURAL:'Prod. Rural', PESSOA_FISICA:'P. Física', ENTIDADES:'Entidades' };
 const LABEL_ANEXO = { ANEXO_I:'Anx. I', ANEXO_II:'Anx. II', ANEXO_III:'Anx. III', ANEXO_IV:'Anx. IV', ANEXO_V:'Anx. V' };
+const UFS = ['AC','AL','AP','AM','BA','CE','DF','ES','GO','MA','MT','MS','MG','PA','PB','PR','PE','PI','RJ','RN','RS','RO','RR','SC','SP','SE','TO'];
 
 const fmtDoc = (cnpj, tipo) => {
   if (!cnpj) return '—';
@@ -29,6 +30,8 @@ const CAMPOS_LOTE = [
   { key: 'enquadramento',    label: 'Enquadramento tributário', tipo: 'select',
     opcoes: [{ v:'SIMPLES_NACIONAL', l:'Simples Nacional' }, { v:'LUCRO_PRESUMIDO', l:'Lucro Presumido' }, { v:'LUCRO_REAL', l:'Lucro Real' }, { v:'MEI', l:'MEI' }, { v:'CEI', l:'CEI' }, { v:'DOMESTICA', l:'Doméstica' }, { v:'PRODUTOR_RURAL', l:'Produtor Rural' }, { v:'PESSOA_FISICA', l:'Pessoa Física' }, { v:'ENTIDADES', l:'Entidades' }] },
   { key: 'responsavelId',    label: 'Responsável',              tipo: 'responsavel' },
+  { key: 'cidade',           label: 'Cidade',                   tipo: 'texto', placeholder: 'Ex: Divinópolis' },
+  { key: 'estado',           label: 'Estado (UF)',              tipo: 'uf' },
 ];
 
 const Checkbox = ({ checked, onClick }) => (
@@ -88,7 +91,7 @@ export default function Empresas() {
 
   async function excluirEmLote() {
     const nomes = empresas.filter(e => selecionadas.includes(e.id)).map(e => e.razaoSocial);
-    if (!window.confirm(`EXCLUIR ${selecionadas.length} empresa(s)?\n\n${nomes.slice(0, 5).join('\n')}${nomes.length > 5 ? `\n...e mais ${nomes.length - 5}` : ''}\n\nEsta ação não pode ser desfeita.`)) return;
+    if (!window.confirm(`EXCLUIR ${selecionadas.length} empresa(s)?\n\n${nomes.slice(0,5).join('\n')}${nomes.length > 5 ? `\n...e mais ${nomes.length - 5}` : ''}\n\nEsta ação não pode ser desfeita.`)) return;
     setExcluindoLote(true);
     try {
       await api.post('/empresas/excluir-lote', { ids: selecionadas });
@@ -158,14 +161,11 @@ export default function Empresas() {
           {isGestor && selecionadas.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
               <span className="text-xs font-semibold text-blue-700">{selecionadas.length} selecionada(s)</span>
-              <button
-                onClick={() => setMostraEdicaoLote(!mostraEdicaoLote)}
+              <button onClick={() => setMostraEdicaoLote(!mostraEdicaoLote)}
                 className="text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-300 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors">
                 ✏️ Editar em lote
               </button>
-              <button
-                onClick={excluirEmLote}
-                disabled={excluindoLote}
+              <button onClick={excluirEmLote} disabled={excluindoLote}
                 className="text-xs font-semibold text-red-600 hover:text-red-800 border border-red-300 px-2 py-0.5 rounded hover:bg-red-100 transition-colors">
                 {excluindoLote ? 'Excluindo...' : '🗑 Excluir'}
               </button>
@@ -189,8 +189,7 @@ export default function Empresas() {
               <p className="text-sm font-semibold text-ink">Editar em lote — {selecionadas.length} empresa(s)</p>
               <p className="text-xs text-faint mt-0.5">Marque os campos que deseja alterar e defina o novo valor</p>
             </div>
-            <button
-              onClick={() => { setMostraEdicaoLote(false); setCamposLote({}); setCamposAtivos({}); }}
+            <button onClick={() => { setMostraEdicaoLote(false); setCamposLote({}); setCamposAtivos({}); }}
               className="text-xs text-muted hover:text-ink">✕ Fechar</button>
           </div>
           <div className="grid grid-cols-2 gap-3 mb-4">
@@ -236,111 +235,4 @@ export default function Empresas() {
                         {responsaveis.map(r => <option key={r.id} value={r.id}>{r.nome}</option>)}
                       </select>
                     )}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-3">
-            <button onClick={salvarEdicaoLote} disabled={salvandoLote} className="btn btn-primary">
-              {salvandoLote
-                ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
-                : `Aplicar em ${selecionadas.length} empresa(s)`}
-            </button>
-            <button
-              onClick={() => { setMostraEdicaoLote(false); setCamposLote({}); setCamposAtivos({}); }}
-              className="btn btn-secondary">Cancelar</button>
-          </div>
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>
-      ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-surface2">
-              <tr>
-                {isGestor && (
-                  <th className="px-4 py-2.5 border-b border-border w-8">
-                    <Checkbox
-                      checked={todasSelecionadas || algumasSelecionadas}
-                      onClick={toggleTodas}
-                    />
-                  </th>
-                )}
-                {['Empresa', 'Enquadramento', 'Tipo', 'Responsável', 'Nível', 'Prazo', ''].map(h => (
-                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {filtradas.map(emp => (
-                <tr
-                  key={emp.id}
-                  onClick={() => navigate(`/empresas/${emp.id}/editar`, { state: { listaIds: filtradas.map(e => e.id) } })}
-                  className={`border-b border-border last:border-b-0 cursor-pointer hover:bg-blue-50 transition-colors ${emp.saiuDoEscritorio ? 'opacity-50' : ''} ${selecionadas.includes(emp.id) ? 'bg-blue-50' : ''}`}>
-                  {isGestor && (
-                    <td className="px-4 py-3 w-8" onClick={e => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selecionadas.includes(emp.id)}
-                        onClick={e => toggleSelecao(e, emp.id)}
-                      />
-                    </td>
-                  )}
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-semibold text-ink">{emp.razaoSocial}</p>
-                        {emp.saiuDoEscritorio && <span className="pill pill-amber text-[10px]">Saiu</span>}
-                        {emp.temFilial && emp.filiaisVinculadas?.length > 0 && (
-                          <span className="pill pill-blue text-[10px]">Matriz · {emp.filiaisVinculadas.length} filial(is)</span>
-                        )}
-                      </div>
-                      <p className="text-xs text-faint font-mono">{fmtDoc(emp.cnpj, emp.tipoDocumento)} · {emp.tipoDocumento || 'CNPJ'}</p>
-                      {emp.matriz && <p className="text-[11px] text-blue-600 font-medium">↳ Filial de {emp.matriz.razaoSocial}</p>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="pill pill-teal text-[11px]">{LABEL_ENQ[emp.enquadramento] || emp.enquadramento}</span>
-                      {emp.anexoSimples && <span className="pill pill-gray text-[10px]">{LABEL_ANEXO[emp.anexoSimples]}</span>}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted">{emp.tipo?.replace(/_/g, ' ')}</td>
-                  <td className="px-4 py-3 text-sm text-muted">{emp.responsavel?.nome || '—'}</td>
-                  <td className="px-4 py-3">
-                    <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center text-xs font-bold ${NIVEL_BG[emp.nivel]}`}>{emp.nivel}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-muted">{emp.prazoEntrega ? `Dia ${emp.prazoEntrega}` : '—'}</td>
-                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-3 justify-end">
-                      {isGestor && (
-                        <button onClick={e => marcarSaiu(e, emp)}
-                          className={`text-xs font-medium hover:underline ${emp.saiuDoEscritorio ? 'text-green-600' : 'text-amber-600'}`}>
-                          {emp.saiuDoEscritorio ? 'Reativar' : 'Saiu'}
-                        </button>
-                      )}
-                      {isGestor && (
-                        <button onClick={e => excluir(e, emp)} className="text-xs text-red-500 hover:underline font-medium">
-                          Excluir
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!filtradas.length && (
-                <tr>
-                  <td colSpan={isGestor ? 8 : 7} className="px-4 py-10 text-center text-sm text-faint">
-                    Nenhuma empresa encontrada
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
-}
+                    {campo.tipo === 'texto' && (
