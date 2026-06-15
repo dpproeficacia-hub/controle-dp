@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -6,6 +6,14 @@ const ESCOPO_OPTS = [
   { key: 'todas', label: 'Todas as empresas' },
   { key: 'uma', label: 'Uma empresa específica' },
   { key: 'selecionar', label: 'Empresas selecionadas' },
+];
+
+const FILTROS_TIPO = [
+  { key: 'todas',         label: 'Todas' },
+  { key: 'funcionarios',  label: 'Com funcionários' },
+  { key: 'proLabore',     label: 'Pró-labore' },
+  { key: 'semMovimento',  label: 'Sem movimento' },
+  { key: 'reinf',         label: 'Envia REINF' },
 ];
 
 const MESES = [
@@ -29,7 +37,7 @@ export default function Tarefas() {
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const LIMIT = 50;
-  const [empresas, setEmpresas] = useState([]);
+  const [todasEmpresas, setTodasEmpresas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(formVazio);
   const [novaSub, setNovaSub] = useState('');
@@ -38,10 +46,12 @@ export default function Tarefas() {
   const [mostraForm, setMostraForm] = useState(false);
   const [buscaInput, setBuscaInput] = useState('');
   const [filtroBusca, setFiltroBusca] = useState('');
+  const [filtroTipoEmpresa, setFiltroTipoEmpresa] = useState('todas');
+  const [buscaEmpresaForm, setBuscaEmpresaForm] = useState('');
   const { isGestor } = useAuth();
 
   useEffect(() => {
-    api.get('/empresas').then(r => setEmpresas(r.data));
+    api.get('/empresas').then(r => setTodasEmpresas(r.data));
   }, []);
 
   useEffect(() => {
@@ -62,16 +72,30 @@ export default function Tarefas() {
     return () => clearTimeout(timer);
   }, [buscaInput]);
 
+  // Filtra empresas pelo tipo selecionado no formulário
+  const empresasFiltradas = todasEmpresas.filter(emp => {
+    const matchBusca = !buscaEmpresaForm ||
+      emp.razaoSocial.toLowerCase().includes(buscaEmpresaForm.toLowerCase());
+    const matchTipo =
+      filtroTipoEmpresa === 'todas'        ? true :
+      filtroTipoEmpresa === 'funcionarios' ? emp.temFuncionarios :
+      filtroTipoEmpresa === 'proLabore'    ? emp.temProLabore :
+      filtroTipoEmpresa === 'semMovimento' ? emp.semMovimento :
+      filtroTipoEmpresa === 'reinf'        ? emp.enviaReinf : true;
+    return matchBusca && matchTipo;
+  });
+
   function cancelar() {
     setEditandoId(null);
     setForm(formVazio);
     setNovaSub('');
     setMostraForm(false);
+    setFiltroTipoEmpresa('todas');
+    setBuscaEmpresaForm('');
   }
 
   function iniciarEdicao(g) {
     setEditandoId(g.id);
-    // Extrai mês e ano do inicioCobrancaEm se existir
     let inicioMes = '', inicioAno = '';
     if (g.inicioCobrancaEm) {
       const d = new Date(g.inicioCobrancaEm);
@@ -84,6 +108,8 @@ export default function Tarefas() {
       escopo: 'uma', empresaId: g.empresaId, empresasIds: [],
       subtarefas: (g.subtarefas || []).map(s => ({ nome: s.nome, temValor: s.temValor })),
     });
+    setFiltroTipoEmpresa('todas');
+    setBuscaEmpresaForm('');
     setMostraForm(true);
     window.scrollTo(0, 0);
   }
@@ -101,8 +127,20 @@ export default function Tarefas() {
   function toggleEmpresa(id) {
     setForm(f => ({
       ...f,
-      empresasIds: f.empresasIds.includes(id) ? f.empresasIds.filter(x => x !== id) : [...f.empresasIds, id]
+      empresasIds: f.empresasIds.includes(id)
+        ? f.empresasIds.filter(x => x !== id)
+        : [...f.empresasIds, id]
     }));
+  }
+
+  function toggleTodasFiltradas() {
+    const ids = empresasFiltradas.map(e => e.id);
+    const todasMarcadas = ids.every(id => form.empresasIds.includes(id));
+    if (todasMarcadas) {
+      setForm(f => ({ ...f, empresasIds: f.empresasIds.filter(id => !ids.includes(id)) }));
+    } else {
+      setForm(f => ({ ...f, empresasIds: [...new Set([...f.empresasIds, ...ids])] }));
+    }
   }
 
   async function salvar(e) {
@@ -111,7 +149,7 @@ export default function Tarefas() {
     if (editandoId) {
       empresaIds = [form.empresaId];
     } else if (form.escopo === 'todas') {
-      empresaIds = empresas.map(emp => emp.id);
+      empresaIds = todasEmpresas.map(emp => emp.id);
     } else if (form.escopo === 'uma') {
       if (!form.empresaId) { alert('Selecione uma empresa.'); return; }
       empresaIds = [form.empresaId];
@@ -121,7 +159,6 @@ export default function Tarefas() {
     }
     if (empresaIds.length === 0) { alert('Nenhuma empresa disponível.'); return; }
 
-    // Monta a data de início (dia 1 do mês selecionado)
     let inicioCobrancaEm = null;
     if (form.inicioMes && form.inicioAno) {
       inicioCobrancaEm = `${form.inicioAno}-${form.inicioMes}-01`;
@@ -163,6 +200,8 @@ export default function Tarefas() {
   }
 
   const totalPages = Math.ceil(total / LIMIT);
+  const todasFiltradasSelecionadas = empresasFiltradas.length > 0 &&
+    empresasFiltradas.every(e => form.empresasIds.includes(e.id));
 
   return (
     <div>
@@ -205,7 +244,6 @@ export default function Tarefas() {
                 </select>
               </div>
 
-              {/* Início de cobrança — mês e ano */}
               <div className="col-span-2">
                 <label className="label">
                   Início de cobrança
@@ -241,7 +279,7 @@ export default function Tarefas() {
             {!editandoId && (
               <div>
                 <label className="label mb-2">Aplicar para</label>
-                <div className="flex gap-2 flex-wrap">
+                <div className="flex gap-2 flex-wrap mb-3">
                   {ESCOPO_OPTS.map(opt => (
                     <button key={opt.key} type="button"
                       onClick={() => setForm(f => ({ ...f, escopo: opt.key, empresaId: '', empresasIds: [] }))}
@@ -250,40 +288,93 @@ export default function Tarefas() {
                     </button>
                   ))}
                 </div>
+
                 {form.escopo === 'uma' && (
-                  <div className="mt-3">
+                  <div>
+                    {/* Filtros de tipo */}
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {FILTROS_TIPO.map(f => (
+                        <button key={f.key} type="button"
+                          onClick={() => setFiltroTipoEmpresa(f.key)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${filtroTipoEmpresa === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+                          {f.label}
+                        </button>
+                      ))}
+                    </div>
                     <select className="select" required value={form.empresaId}
                       onChange={e => setForm(f => ({ ...f, empresaId: e.target.value }))}>
                       <option value="">Selecionar empresa...</option>
-                      {empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.razaoSocial}</option>)}
+                      {empresasFiltradas.map(emp => (
+                        <option key={emp.id} value={emp.id}>{emp.razaoSocial}</option>
+                      ))}
                     </select>
+                    <p className="text-xs text-faint mt-1">{empresasFiltradas.length} empresa(s) no filtro</p>
                   </div>
                 )}
+
                 {form.escopo === 'selecionar' && (
-                  <div className="mt-3">
-                    <div className="border border-border rounded-lg max-h-48 overflow-y-auto">
-                      {empresas.map(emp => (
-                        <label key={emp.id}
-                          className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface2 cursor-pointer border-b border-border last:border-b-0">
-                          <div onClick={() => toggleEmpresa(emp.id)}
-                            className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${form.empresasIds.includes(emp.id) ? 'bg-ink border-ink' : 'border-border2'}`}>
-                            {form.empresasIds.includes(emp.id) && (
-                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                                <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-                              </svg>
-                            )}
-                          </div>
-                          <span className="text-sm text-ink">{emp.razaoSocial}</span>
-                        </label>
+                  <div>
+                    {/* Filtros de tipo */}
+                    <div className="flex gap-1.5 flex-wrap mb-2">
+                      {FILTROS_TIPO.map(f => (
+                        <button key={f.key} type="button"
+                          onClick={() => setFiltroTipoEmpresa(f.key)}
+                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${filtroTipoEmpresa === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+                          {f.label}
+                        </button>
                       ))}
+                    </div>
+
+                    <div className="flex items-center justify-between mb-1.5">
+                      <input className="input flex-1 text-xs h-8 mr-2" placeholder="Buscar empresa..."
+                        value={buscaEmpresaForm}
+                        onChange={e => setBuscaEmpresaForm(e.target.value)} />
+                      <button type="button" onClick={toggleTodasFiltradas}
+                        className="text-xs text-blue-600 hover:underline flex-shrink-0">
+                        {todasFiltradasSelecionadas ? 'Desmarcar' : 'Selecionar todas'}
+                        {filtroTipoEmpresa !== 'todas' ? ' filtradas' : ''}
+                      </button>
+                    </div>
+
+                    <div className="border border-border rounded-lg max-h-48 overflow-y-auto">
+                      {empresasFiltradas.length === 0 ? (
+                        <p className="text-xs text-faint p-3 text-center">Nenhuma empresa encontrada</p>
+                      ) : (
+                        empresasFiltradas.map(emp => (
+                          <label key={emp.id}
+                            className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface2 cursor-pointer border-b border-border last:border-b-0">
+                            <div onClick={() => toggleEmpresa(emp.id)}
+                              className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${form.empresasIds.includes(emp.id) ? 'bg-ink border-ink' : 'border-border2'}`}>
+                              {form.empresasIds.includes(emp.id) && (
+                                <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                                  <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+                                </svg>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-ink truncate">{emp.razaoSocial}</p>
+                              <div className="flex gap-1 mt-0.5 flex-wrap">
+                                {emp.temFuncionarios && <span className="text-[10px] text-blue-600">funcionários</span>}
+                                {emp.temProLabore && <span className="text-[10px] text-purple-600">pró-labore</span>}
+                                {emp.semMovimento && <span className="text-[10px] text-gray-500">sem movimento</span>}
+                                {emp.enviaReinf && <span className="text-[10px] text-green-600">REINF</span>}
+                              </div>
+                            </div>
+                            {form.empresasIds.includes(emp.id) && (
+                              <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />
+                            )}
+                          </label>
+                        ))
+                      )}
                     </div>
                     {form.empresasIds.length > 0 && (
                       <p className="text-xs text-muted mt-1">{form.empresasIds.length} empresa(s) selecionada(s)</p>
                     )}
                   </div>
                 )}
-                {form.escopo === 'todas' && empresas.length > 0 && (
-                  <p className="text-xs text-muted mt-2">A tarefa será criada para as <strong>{empresas.length}</strong> empresas.</p>
+
+                {form.escopo === 'todas' && (
+                  <p className="text-xs text-muted mt-1">A tarefa será criada para as <strong>{todasEmpresas.length}</strong> empresas.</p>
                 )}
               </div>
             )}
@@ -312,7 +403,9 @@ export default function Tarefas() {
 
           <div className="flex gap-3 mt-5">
             <button type="submit" disabled={salvando} className="btn btn-primary">
-              {salvando ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : editandoId ? 'Salvar alterações' : 'Criar tarefa'}
+              {salvando
+                ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+                : editandoId ? 'Salvar alterações' : 'Criar tarefa'}
             </button>
             <button type="button" onClick={cancelar} className="btn btn-secondary">Cancelar</button>
           </div>
@@ -330,7 +423,6 @@ export default function Tarefas() {
       ) : grupos.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-muted text-sm">Nenhuma tarefa cadastrada.</p>
-          <p className="text-faint text-xs mt-1">Clique em "+ Nova tarefa" para começar.</p>
         </div>
       ) : (
         <>
