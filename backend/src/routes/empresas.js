@@ -13,7 +13,6 @@ router.get('/', async (req, res) => {
             temProLabore, enviaReinf, fatorR, incluirSaiu } = req.query;
     const where = { ativa: true, escritorioId: req.user.escritorioId };
 
-    // OPERADOR só vê as suas, GESTOR/ADMIN vê todas
     if (req.user.nivel === 'OPERADOR') {
       where.responsavelId = req.user.id;
       where.saiuDoEscritorio = false;
@@ -68,6 +67,7 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const {
       razaoSocial, cnpj, tipoDocumento, enquadramento, tipo, nivel, prazoEntrega,
+      cidade, estado,
       temFuncionarios, temProLabore, semMovimento, temFilial, fatorR, enviaReinf,
       observacoes, responsavelId, matrizId, filiaisIds, participaTarefas
     } = req.body;
@@ -79,6 +79,8 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         razaoSocial, cnpj: docLimpo,
         tipoDocumento: tipoDocumento || 'CNPJ',
         enquadramento, tipo, nivel: nivel || 'N3', prazoEntrega: prazo,
+        cidade: cidade?.trim() || null,
+        estado: estado?.trim()?.toUpperCase() || null,
         temFuncionarios: temFuncionarios || false,
         temProLabore: temProLabore || false,
         semMovimento: semMovimento || false,
@@ -116,6 +118,8 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
     dados.prazoEntrega = !dados.prazoEntrega ? null : Number(dados.prazoEntrega) || null;
     if (dados.responsavelId === '') dados.responsavelId = null;
     if (dados.matrizId === '') dados.matrizId = null;
+    if (dados.cidade !== undefined) dados.cidade = dados.cidade?.trim() || null;
+    if (dados.estado !== undefined) dados.estado = dados.estado?.trim()?.toUpperCase() || null;
     delete dados.escritorioId;
     const empresa = await prisma.empresa.update({
       where: { id: req.params.id },
@@ -145,18 +149,16 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-// Edição em lote de campos
 router.post('/editar-lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { ids, campos } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: 'Nenhuma empresa selecionada.' });
     }
-    // Campos permitidos para edição em lote
     const camposPermitidos = [
       'temFuncionarios', 'temProLabore', 'semMovimento', 'enviaReinf',
       'fatorR', 'participaTarefas', 'nivel', 'tipo', 'enquadramento',
-      'responsavelId', 'prazoEntrega'
+      'responsavelId', 'prazoEntrega', 'cidade', 'estado'
     ];
     const dadosLimpos = {};
     for (const [k, v] of Object.entries(campos)) {
