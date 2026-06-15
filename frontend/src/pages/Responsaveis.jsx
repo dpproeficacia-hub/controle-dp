@@ -39,7 +39,6 @@ export default function Responsaveis() {
     setEditandoId(u.id);
     setFormU({ nome: u.nome, email: u.email, senha: '', nivel: u.nivel });
     setMostrarSenha(false);
-    // Pré-seleciona empresas já vinculadas ao usuário
     const vinculadas = empresas.filter(e => e.responsavelId === u.id).map(e => e.id);
     setEmpresasSelecionadas(vinculadas);
     setBuscaEmpresa('');
@@ -78,32 +77,33 @@ export default function Responsaveis() {
     try {
       let usuarioId = editandoId;
 
+      // 1. Salva dados do usuário
       if (editandoId) {
         const payload = { nome: formU.nome, email: formU.email, nivel: formU.nivel };
         if (formU.senha) payload.senha = formU.senha;
-        const { data } = await api.put(`/responsaveis/${editandoId}`, payload);
-        setUsuarios(us => us.map(u => u.id === editandoId ? data : u));
+        await api.put(`/responsaveis/${editandoId}`, payload);
       } else {
         const { data } = await api.post('/responsaveis', formU);
-        setUsuarios(us => [...us, data]);
         usuarioId = data.id;
       }
 
-      // Atualiza responsável das empresas selecionadas
-      // 1. Remove responsável das que foram desmarcadas
-      const antesVinculadas = empresas.filter(e => e.responsavelId === usuarioId).map(e => e.id);
-      const remover = antesVinculadas.filter(id => !empresasSelecionadas.includes(id));
+      // 2. Atualiza empresas com UMA ÚNICA chamada ao backend (updateMany)
+      const antesVinculadas = empresas
+        .filter(e => e.responsavelId === usuarioId)
+        .map(e => e.id);
+
       const adicionar = empresasSelecionadas.filter(id => !antesVinculadas.includes(id));
+      const remover = antesVinculadas.filter(id => !empresasSelecionadas.includes(id));
 
-      await Promise.all([
-        ...remover.map(id => api.put(`/empresas/${id}`, { responsavelId: null })),
-        ...adicionar.map(id => api.put(`/empresas/${id}`, { responsavelId: usuarioId }))
-      ]);
+      if (adicionar.length > 0 || remover.length > 0) {
+        await api.post(`/responsaveis/${usuarioId}/empresas`, { adicionar, remover });
+      }
 
-      // Recarrega empresas para refletir mudanças
+      // 3. Recarrega empresas para refletir mudanças
       const { data: empAtual } = await api.get('/empresas');
       setEmpresas(empAtual);
 
+      carregarUsuarios();
       cancelarFormU();
     } catch (err) {
       alert(err.response?.data?.error || 'Erro ao salvar usuário');
@@ -141,11 +141,9 @@ export default function Responsaveis() {
   }
 
   const podeGerenciar = isAdmin || isGestor;
-
   const empresasFiltradas = empresas.filter(e =>
     !buscaEmpresa || e.razaoSocial.toLowerCase().includes(buscaEmpresa.toLowerCase())
   );
-
   const todasVisiveisSelecionadas = empresasFiltradas.length > 0 &&
     empresasFiltradas.every(e => empresasSelecionadas.includes(e.id));
 
@@ -224,7 +222,9 @@ export default function Responsaveis() {
                 <div className="flex items-center justify-between mb-2">
                   <label className="label mb-0">
                     Empresas sob responsabilidade
-                    <span className="text-faint font-normal ml-1">({empresasSelecionadas.length} selecionada{empresasSelecionadas.length !== 1 ? 's' : ''})</span>
+                    <span className="text-faint font-normal ml-1">
+                      ({empresasSelecionadas.length} selecionada{empresasSelecionadas.length !== 1 ? 's' : ''})
+                    </span>
                   </label>
                   <button type="button" onClick={toggleTodasEmpresas}
                     className="text-xs text-blue-600 hover:underline">
@@ -305,13 +305,17 @@ export default function Responsaveis() {
                           </div>
                         </td>
                         <td className="px-4 py-3 text-sm text-muted">{u.email}</td>
-                        <td className="px-4 py-3"><span className={`pill ${NIVEL_PILL[u.nivel]}`}>{u.nivel}</span></td>
+                        <td className="px-4 py-3">
+                          <span className={`pill ${NIVEL_PILL[u.nivel]}`}>{u.nivel}</span>
+                        </td>
                         <td className="px-4 py-3">
                           {qtdEmpresas > 0
                             ? <span className="pill pill-blue text-[10px]">{qtdEmpresas} empresa{qtdEmpresas !== 1 ? 's' : ''}</span>
                             : <span className="text-xs text-faint">Nenhuma</span>}
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted">{new Date(u.criadoEm).toLocaleDateString('pt-BR')}</td>
+                        <td className="px-4 py-3 text-sm text-muted">
+                          {new Date(u.criadoEm).toLocaleDateString('pt-BR')}
+                        </td>
                         <td className="px-4 py-3 text-right">
                           {podeGerenciar && (
                             <div className="flex items-center gap-3 justify-end">
