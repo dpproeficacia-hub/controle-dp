@@ -86,6 +86,7 @@ export default function Layout() {
           {isAdmin && (
             <>
               <p className="px-2 py-2 mt-2 text-[10px] font-semibold uppercase tracking-widest" style={{color:'rgba(255,255,255,0.4)'}}>Sistema</p>
+              <NI to="/feriados">Feriados</NI>
               <NI to="/identidade">Identidade Visual</NI>
               <NI to="/importacao">Importar Empresas</NI>
             </>
