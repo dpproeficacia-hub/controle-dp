@@ -87,19 +87,20 @@ model Escritorio {
   usuarios   Usuario[]
   empresas   Empresa[]
   sindicatos Sindicato[]
+  feriados   Feriado[]
 }
 
 model Usuario {
-  id           String        @id @default(cuid())
+  id           String          @id @default(cuid())
   escritorioId String
-  escritorio   Escritorio    @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
+  escritorio   Escritorio      @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
   nome         String
-  email        String        @unique
+  email        String          @unique
   senha        String
-  nivel        NivelAcesso   @default(OPERADOR)
-  ativo        Boolean       @default(true)
-  criadoEm     DateTime      @default(now())
-  empresas     Empresa[]     @relation("ResponsavelEmpresa")
+  nivel        NivelAcesso     @default(OPERADOR)
+  ativo        Boolean         @default(true)
+  criadoEm     DateTime        @default(now())
+  empresas     Empresa[]       @relation("ResponsavelEmpresa")
   historicos   HistoricoMensal[]
   eventos      EventoAgenda[]
   resets       ResetSenha[]
@@ -125,6 +126,18 @@ model ResetSenha {
   usado     Boolean  @default(false)
   expiraEm  DateTime
   criadoEm  DateTime @default(now())
+}
+
+model Feriado {
+  id           String     @id @default(cuid())
+  escritorioId String
+  escritorio   Escritorio @relation(fields: [escritorioId], references: [id], onDelete: Cascade)
+  nome         String
+  dia          Int
+  mes          Int
+  cidade       String?    // null = feriado do escritório inteiro (estadual cadastrado manualmente)
+  estado       String?
+  criadoEm     DateTime   @default(now())
 }
 
 model Sindicato {
@@ -153,6 +166,8 @@ model Empresa {
   tipo              TipoEmpresa
   nivel             NivelComplexidade @default(N3)
   prazoEntrega      Int?
+  cidade            String?
+  estado            String?
   temFuncionarios   Boolean           @default(false)
   temProLabore      Boolean           @default(false)
   semMovimento      Boolean           @default(false)
@@ -244,6 +259,7 @@ model GrupoTarefa {
   empresa          Empresa        @relation(fields: [empresaId], references: [id], onDelete: Cascade)
   nome             String
   diaVencimento    Int
+  isDiaUtil        Boolean        @default(false)
   tipo             TipoTarefa     @default(RECORRENTE)
   ativo            Boolean        @default(true)
   ordem            Int            @default(0)
