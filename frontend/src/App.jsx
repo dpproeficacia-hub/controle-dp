@@ -14,6 +14,7 @@ import Importacao from './pages/Importacao';
 import Agenda from './pages/Agenda';
 import Tarefas from './pages/Tarefas';
 import Relatorio from './pages/Relatorio';
+import Feriados from './pages/Feriados';
 
 function Protegido({ children }) {
   const { usuario, carregando } = useAuth();
@@ -49,6 +50,7 @@ export default function App() {
             <Route path="agenda" element={<Agenda />} />
             <Route path="tarefas" element={<Tarefas />} />
             <Route path="relatorio" element={<Relatorio />} />
+            <Route path="feriados" element={<Feriados />} />
           </Route>
         </Routes>
       </BrowserRouter>
