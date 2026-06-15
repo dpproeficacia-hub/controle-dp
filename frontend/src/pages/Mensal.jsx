@@ -16,7 +16,9 @@ const BOLINHA = {
 function Bolinha({ tipo }) {
   if (!tipo) return null;
   const b = BOLINHA[tipo];
-  return <span title={b.title} className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${b.bg}`} />;
+  return (
+    <span title={b.title} className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${b.bg}`} />
+  );
 }
 
 export default function Mensal() {
@@ -55,27 +57,27 @@ export default function Mensal() {
   }
 
   const filtradas = empresas.filter(e => {
-    // Só mostra empresas que têm pelo menos 1 tarefa cadastrada
     if (e._totalGrupos === 0) return false;
 
     const matchTipo =
-      filtroTipo === 'TODAS' ||
-      // CORRIGIDO: cada filtro é independente — não exclui por outras condições
-      (filtroTipo === 'FUNCIONARIOS' && e.temFuncionarios) ||
-      (filtroTipo === 'PROLABORE' && e.temProLabore) ||
-      (filtroTipo === 'SEM_MOVIMENTO' && e.semMovimento);
+      filtroTipo === 'TODAS'            ? true :
+      filtroTipo === 'FUNCIONARIOS'     ? e.temFuncionarios :
+      filtroTipo === 'PROLABORE'        ? e.temProLabore :
+      filtroTipo === 'SO_PROLABORE'     ? (e.temProLabore && !e.temFuncionarios) :
+      filtroTipo === 'SEM_MOVIMENTO'    ? e.semMovimento : true;
 
-    const matchStatus = filtroStatus === 'TODOS' || e.historico?.status === filtroStatus;
+    const matchStatus  = filtroStatus === 'TODOS'  || e.historico?.status === filtroStatus;
     const matchBolinha = filtroBolinha === 'TODOS' || e._bolinha === filtroBolinha;
-    const matchBusca = !busca || e.razaoSocial.toLowerCase().includes(busca.toLowerCase()) || e.cnpj.includes(busca);
+    const matchBusca   = !busca || e.razaoSocial.toLowerCase().includes(busca.toLowerCase()) || e.cnpj.includes(busca);
     return matchTipo && matchStatus && matchBolinha && matchBusca;
   });
 
   const tiposFiltro = [
-    { key: 'TODAS',        label: 'Todas' },
-    { key: 'FUNCIONARIOS', label: 'Com funcionários' },
-    { key: 'PROLABORE',    label: 'Pró-labore' },
-    { key: 'SEM_MOVIMENTO',label: 'Sem movimento' },
+    { key: 'TODAS',         label: 'Todas' },
+    { key: 'FUNCIONARIOS',  label: 'Com funcionários' },
+    { key: 'PROLABORE',     label: 'Pró-labore' },
+    { key: 'SO_PROLABORE',  label: 'Só pró-labore' },
+    { key: 'SEM_MOVIMENTO', label: 'Sem movimento' },
   ];
 
   const statusFiltro = [
@@ -92,14 +94,13 @@ export default function Mensal() {
     { key: 'azul',     label: '🔵 No prazo' },
   ];
 
+  const totalJanela = empresas.filter(e => e._totalGrupos > 0 && dentroDaJanela(e)).length;
   const emAtraso    = empresas.filter(e => e._totalGrupos > 0 && e._bolinha === 'vermelho').length;
   const proximoVenc = empresas.filter(e => e._totalGrupos > 0 && e._bolinha === 'laranja').length;
-  const totalJanela = empresas.filter(e => e._totalGrupos > 0 && dentroDaJanela(e)).length;
 
   return (
     <div>
-      {/* KPIs rápidos */}
-      {(emAtraso > 0 || proximoVenc > 0 || totalJanela > 0) && (
+      {(totalJanela > 0 || emAtraso > 0) && (
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
             onClick={() => setFiltroBolinha(filtroBolinha === 'vermelho' ? 'TODOS' : 'vermelho')}>
@@ -160,7 +161,7 @@ export default function Mensal() {
           <p className="text-muted text-sm">Nenhuma empresa encontrada.</p>
           {empresas.filter(e => e._totalGrupos === 0).length > 0 && (
             <p className="text-xs text-faint mt-2">
-              {empresas.filter(e => e._totalGrupos === 0).length} empresa(s) sem tarefas cadastradas não são exibidas.
+              {empresas.filter(e => e._totalGrupos === 0).length} empresa(s) sem tarefas não são exibidas.
             </p>
           )}
         </div>
@@ -197,7 +198,7 @@ export default function Mensal() {
                     <td className="px-4 py-3 text-xs text-muted">
                       {emp.temFuncionarios && emp.temProLabore ? 'Func. + Pró-labore'
                         : emp.temFuncionarios ? 'Com funcionários'
-                        : emp.temProLabore ? 'Pró-labore'
+                        : emp.temProLabore ? 'Só pró-labore'
                         : emp.semMovimento ? 'Sem movimento'
                         : 'Outros'}
                     </td>
@@ -212,19 +213,14 @@ export default function Mensal() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        {status !== 'FINALIZADO' && emp._bolinha && (
-                          <Bolinha tipo={emp._bolinha} />
-                        )}
+                        {status !== 'FINALIZADO' && emp._bolinha && <Bolinha tipo={emp._bolinha} />}
                         {status === 'FINALIZADO' && (
                           <span className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0" title="Concluído" />
                         )}
                         <div className="flex items-center gap-1.5 flex-1">
                           <div className="flex-1 h-1.5 bg-border rounded-full overflow-hidden min-w-[50px]">
                             <div className="h-full rounded-full transition-all"
-                              style={{
-                                width: `${pct}%`,
-                                background: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D'
-                              }} />
+                              style={{ width: `${pct}%`, background: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D' }} />
                           </div>
                           <span className="text-xs text-faint w-7 text-right">{pct}%</span>
                         </div>
