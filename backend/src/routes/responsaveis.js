@@ -54,6 +54,39 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
+// Rota nova — atribuir empresas em lote a um usuário (uma só query no banco)
+router.post('/:id/empresas', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+  try {
+    const { adicionar, remover } = req.body;
+    // adicionar: array de IDs para vincular ao usuário
+    // remover: array de IDs para desvincular
+
+    if (remover && remover.length > 0) {
+      await prisma.empresa.updateMany({
+        where: {
+          id: { in: remover },
+          escritorioId: req.user.escritorioId
+        },
+        data: { responsavelId: null }
+      });
+    }
+
+    if (adicionar && adicionar.length > 0) {
+      await prisma.empresa.updateMany({
+        where: {
+          id: { in: adicionar },
+          escritorioId: req.user.escritorioId
+        },
+        data: { responsavelId: req.params.id }
+      });
+    }
+
+    res.json({ ok: true, adicionadas: adicionar?.length || 0, removidas: remover?.length || 0 });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.delete('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     if (req.params.id === req.user.id) {
