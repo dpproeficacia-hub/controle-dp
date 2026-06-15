@@ -236,3 +236,124 @@ export default function Empresas() {
                       </select>
                     )}
                     {campo.tipo === 'texto' && (
+                      <input className="input text-xs h-8"
+                        placeholder={campo.placeholder || ''}
+                        value={camposLote[campo.key] || ''}
+                        onChange={e => setCamposLote(p => ({ ...p, [campo.key]: e.target.value }))} />
+                    )}
+                    {campo.tipo === 'uf' && (
+                      <select className="select text-xs h-8"
+                        value={camposLote[campo.key] || ''}
+                        onChange={e => setCamposLote(p => ({ ...p, [campo.key]: e.target.value }))}>
+                        <option value="">Selecionar UF...</option>
+                        {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
+                      </select>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3">
+            <button onClick={salvarEdicaoLote} disabled={salvandoLote} className="btn btn-primary">
+              {salvandoLote
+                ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+                : `Aplicar em ${selecionadas.length} empresa(s)`}
+            </button>
+            <button onClick={() => { setMostraEdicaoLote(false); setCamposLote({}); setCamposAtivos({}); }}
+              className="btn btn-secondary">Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>
+      ) : (
+        <div className="card overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-surface2">
+              <tr>
+                {isGestor && (
+                  <th className="px-4 py-2.5 border-b border-border w-8">
+                    <Checkbox
+                      checked={todasSelecionadas || algumasSelecionadas}
+                      onClick={toggleTodas} />
+                  </th>
+                )}
+                {['Empresa', 'Enquadramento', 'Tipo', 'Responsável', 'Nível', 'Prazo', ''].map(h => (
+                  <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtradas.map(emp => (
+                <tr
+                  key={emp.id}
+                  onClick={() => navigate(`/empresas/${emp.id}/editar`, { state: { listaIds: filtradas.map(e => e.id) } })}
+                  className={`border-b border-border last:border-b-0 cursor-pointer hover:bg-blue-50 transition-colors ${emp.saiuDoEscritorio ? 'opacity-50' : ''} ${selecionadas.includes(emp.id) ? 'bg-blue-50' : ''}`}>
+                  {isGestor && (
+                    <td className="px-4 py-3 w-8" onClick={e => e.stopPropagation()}>
+                      <Checkbox
+                        checked={selecionadas.includes(emp.id)}
+                        onClick={e => toggleSelecao(e, emp.id)} />
+                    </td>
+                  )}
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-0.5">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="text-sm font-semibold text-ink">{emp.razaoSocial}</p>
+                        {emp.saiuDoEscritorio && <span className="pill pill-amber text-[10px]">Saiu</span>}
+                        {emp.temFilial && emp.filiaisVinculadas?.length > 0 && (
+                          <span className="pill pill-blue text-[10px]">Matriz · {emp.filiaisVinculadas.length} filial(is)</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-faint font-mono">{fmtDoc(emp.cnpj, emp.tipoDocumento)} · {emp.tipoDocumento || 'CNPJ'}</p>
+                      {emp.cidade && emp.estado && (
+                        <p className="text-[10px] text-faint">📍 {emp.cidade} - {emp.estado}</p>
+                      )}
+                      {emp.matriz && <p className="text-[11px] text-blue-600 font-medium">↳ Filial de {emp.matriz.razaoSocial}</p>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      <span className="pill pill-teal text-[11px]">{LABEL_ENQ[emp.enquadramento] || emp.enquadramento}</span>
+                      {emp.anexoSimples && <span className="pill pill-gray text-[10px]">{LABEL_ANEXO[emp.anexoSimples]}</span>}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted">{emp.tipo?.replace(/_/g, ' ')}</td>
+                  <td className="px-4 py-3 text-sm text-muted">{emp.responsavel?.nome || '—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center text-xs font-bold ${NIVEL_BG[emp.nivel]}`}>{emp.nivel}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-muted">{emp.prazoEntrega ? `Dia ${emp.prazoEntrega}` : '—'}</td>
+                  <td className="px-4 py-3" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-3 justify-end">
+                      {isGestor && (
+                        <button onClick={e => marcarSaiu(e, emp)}
+                          className={`text-xs font-medium hover:underline ${emp.saiuDoEscritorio ? 'text-green-600' : 'text-amber-600'}`}>
+                          {emp.saiuDoEscritorio ? 'Reativar' : 'Saiu'}
+                        </button>
+                      )}
+                      {isGestor && (
+                        <button onClick={e => excluir(e, emp)} className="text-xs text-red-500 hover:underline font-medium">
+                          Excluir
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!filtradas.length && (
+                <tr>
+                  <td colSpan={isGestor ? 8 : 7} className="px-4 py-10 text-center text-sm text-faint">
+                    Nenhuma empresa encontrada
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
