@@ -3,17 +3,18 @@ import api from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
 const ESCOPO_OPTS = [
-  { key: 'todas', label: 'Todas as empresas' },
-  { key: 'uma', label: 'Uma empresa específica' },
-  { key: 'selecionar', label: 'Empresas selecionadas' },
+  { key: 'todas',     label: 'Todas as empresas' },
+  { key: 'uma',       label: 'Uma empresa específica' },
+  { key: 'selecionar',label: 'Empresas selecionadas' },
 ];
 
 const FILTROS_TIPO = [
-  { key: 'todas',         label: 'Todas' },
-  { key: 'funcionarios',  label: 'Com funcionários' },
-  { key: 'proLabore',     label: 'Pró-labore' },
-  { key: 'semMovimento',  label: 'Sem movimento' },
-  { key: 'reinf',         label: 'Envia REINF' },
+  { key: 'todas',          label: 'Todas' },
+  { key: 'funcionarios',   label: 'Com funcionários' },
+  { key: 'proLabore',      label: 'Pró-labore' },
+  { key: 'soProLabore',    label: 'Só pró-labore' },
+  { key: 'semMovimento',   label: 'Sem movimento' },
+  { key: 'reinf',          label: 'Envia REINF' },
 ];
 
 const MESES = [
@@ -72,7 +73,6 @@ export default function Tarefas() {
     return () => clearTimeout(timer);
   }, [buscaInput]);
 
-  // Filtra empresas pelo tipo selecionado no formulário
   const empresasFiltradas = todasEmpresas.filter(emp => {
     const matchBusca = !buscaEmpresaForm ||
       emp.razaoSocial.toLowerCase().includes(buscaEmpresaForm.toLowerCase());
@@ -80,6 +80,7 @@ export default function Tarefas() {
       filtroTipoEmpresa === 'todas'        ? true :
       filtroTipoEmpresa === 'funcionarios' ? emp.temFuncionarios :
       filtroTipoEmpresa === 'proLabore'    ? emp.temProLabore :
+      filtroTipoEmpresa === 'soProLabore'  ? (emp.temProLabore && !emp.temFuncionarios) :
       filtroTipoEmpresa === 'semMovimento' ? emp.semMovimento :
       filtroTipoEmpresa === 'reinf'        ? emp.enviaReinf : true;
     return matchBusca && matchTipo;
@@ -243,7 +244,6 @@ export default function Tarefas() {
                   <option value="PONTUAL">Pontual (uma vez)</option>
                 </select>
               </div>
-
               <div className="col-span-2">
                 <label className="label">
                   Início de cobrança
@@ -282,25 +282,32 @@ export default function Tarefas() {
                 <div className="flex gap-2 flex-wrap mb-3">
                   {ESCOPO_OPTS.map(opt => (
                     <button key={opt.key} type="button"
-                      onClick={() => setForm(f => ({ ...f, escopo: opt.key, empresaId: '', empresasIds: [] }))}
+                      onClick={() => {
+                        setForm(f => ({ ...f, escopo: opt.key, empresaId: '', empresasIds: [] }));
+                        setFiltroTipoEmpresa('todas');
+                        setBuscaEmpresaForm('');
+                      }}
                       className={`px-3 py-1.5 rounded-lg text-sm border transition-all ${form.escopo === opt.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
                       {opt.label}
                     </button>
                   ))}
                 </div>
 
+                {/* Filtros de tipo — aparecem nos modos "uma" e "selecionar" */}
+                {(form.escopo === 'uma' || form.escopo === 'selecionar') && (
+                  <div className="flex gap-1.5 flex-wrap mb-2">
+                    {FILTROS_TIPO.map(f => (
+                      <button key={f.key} type="button"
+                        onClick={() => setFiltroTipoEmpresa(f.key)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${filtroTipoEmpresa === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+                        {f.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 {form.escopo === 'uma' && (
                   <div>
-                    {/* Filtros de tipo */}
-                    <div className="flex gap-1.5 flex-wrap mb-2">
-                      {FILTROS_TIPO.map(f => (
-                        <button key={f.key} type="button"
-                          onClick={() => setFiltroTipoEmpresa(f.key)}
-                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${filtroTipoEmpresa === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
                     <select className="select" required value={form.empresaId}
                       onChange={e => setForm(f => ({ ...f, empresaId: e.target.value }))}>
                       <option value="">Selecionar empresa...</option>
@@ -314,17 +321,6 @@ export default function Tarefas() {
 
                 {form.escopo === 'selecionar' && (
                   <div>
-                    {/* Filtros de tipo */}
-                    <div className="flex gap-1.5 flex-wrap mb-2">
-                      {FILTROS_TIPO.map(f => (
-                        <button key={f.key} type="button"
-                          onClick={() => setFiltroTipoEmpresa(f.key)}
-                          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-all ${filtroTipoEmpresa === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
-                          {f.label}
-                        </button>
-                      ))}
-                    </div>
-
                     <div className="flex items-center justify-between mb-1.5">
                       <input className="input flex-1 text-xs h-8 mr-2" placeholder="Buscar empresa..."
                         value={buscaEmpresaForm}
@@ -335,7 +331,6 @@ export default function Tarefas() {
                         {filtroTipoEmpresa !== 'todas' ? ' filtradas' : ''}
                       </button>
                     </div>
-
                     <div className="border border-border rounded-lg max-h-48 overflow-y-auto">
                       {empresasFiltradas.length === 0 ? (
                         <p className="text-xs text-faint p-3 text-center">Nenhuma empresa encontrada</p>
@@ -355,7 +350,8 @@ export default function Tarefas() {
                               <p className="text-sm text-ink truncate">{emp.razaoSocial}</p>
                               <div className="flex gap-1 mt-0.5 flex-wrap">
                                 {emp.temFuncionarios && <span className="text-[10px] text-blue-600">funcionários</span>}
-                                {emp.temProLabore && <span className="text-[10px] text-purple-600">pró-labore</span>}
+                                {emp.temProLabore && !emp.temFuncionarios && <span className="text-[10px] text-purple-600">só pró-labore</span>}
+                                {emp.temProLabore && emp.temFuncionarios && <span className="text-[10px] text-purple-600">pró-labore</span>}
                                 {emp.semMovimento && <span className="text-[10px] text-gray-500">sem movimento</span>}
                                 {emp.enviaReinf && <span className="text-[10px] text-green-600">REINF</span>}
                               </div>
@@ -374,7 +370,9 @@ export default function Tarefas() {
                 )}
 
                 {form.escopo === 'todas' && (
-                  <p className="text-xs text-muted mt-1">A tarefa será criada para as <strong>{todasEmpresas.length}</strong> empresas.</p>
+                  <p className="text-xs text-muted mt-1">
+                    A tarefa será criada para as <strong>{todasEmpresas.length}</strong> empresas.
+                  </p>
                 )}
               </div>
             )}
