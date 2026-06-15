@@ -167,13 +167,11 @@ export default function EmpresaForm() {
       if (sindical.sindicatoId) {
         await api.put(`/sindical/${empresaId}`, sindical);
       }
+      // CORRIGIDO: sempre volta para /empresas após salvar
       if (irPara) {
         irParaEmpresa(irPara);
-      } else if (!isEdicao) {
-        navigate('/empresas');
       } else {
-        setSalvoOk(true);
-        setTimeout(() => setSalvoOk(false), 3000);
+        navigate('/empresas');
       }
     } catch (err) {
       setErro(err.response?.data?.error || 'Erro ao salvar empresa');
@@ -215,7 +213,6 @@ export default function EmpresaForm() {
         </div>
 
         <div className="flex items-center gap-2">
-          {/* Navegação entre empresas */}
           {listaIds.length > 1 && (
             <div className="flex items-center gap-1 bg-surface2 border border-border rounded-lg px-2 py-1">
               <button type="button"
@@ -234,13 +231,12 @@ export default function EmpresaForm() {
             </div>
           )}
 
-          {/* Salvar fixo no topo */}
           {isEdicao && (
             <button type="button" onClick={salvar} disabled={salvando}
-              className={`btn text-sm px-4 py-2 transition-all ${salvoOk ? 'bg-green-600 text-white border-green-600' : 'btn-primary'}`}>
+              className="btn btn-primary text-sm px-4 py-2">
               {salvando
                 ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
-                : salvoOk ? '✓ Salvo!' : 'Salvar alterações'}
+                : 'Salvar alterações'}
             </button>
           )}
         </div>
@@ -469,13 +465,12 @@ export default function EmpresaForm() {
           <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-4 py-3 rounded-lg">{erro}</div>
         )}
 
-        {/* Botão salvar no rodapé */}
         <div className="flex gap-3 pb-6">
           <button type="submit" disabled={salvando}
-            className={`btn text-sm px-5 py-2.5 transition-all ${salvoOk ? 'bg-green-600 text-white border-green-600' : 'btn-primary'}`}>
+            className="btn btn-primary text-sm px-5 py-2.5">
             {salvando
               ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
-              : salvoOk ? '✓ Salvo!' : isEdicao ? 'Salvar alterações' : 'Cadastrar empresa'}
+              : isEdicao ? 'Salvar alterações' : 'Cadastrar empresa'}
           </button>
           <button type="button" onClick={() => navigate('/empresas')} className="btn btn-secondary">
             Cancelar
