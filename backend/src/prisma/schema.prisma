@@ -80,14 +80,18 @@ enum TipoNotificacao {
 }
 
 model Escritorio {
-  id         String      @id @default(cuid())
-  nome       String
-  ativo      Boolean     @default(true)
-  criadoEm   DateTime    @default(now())
-  usuarios   Usuario[]
-  empresas   Empresa[]
-  sindicatos Sindicato[]
-  feriados   Feriado[]
+  id           String      @id @default(cuid())
+  nome         String
+  corPrimaria  String      @default("#1C1B19")
+  logo         String?
+  whatsapp     String?
+  emailContato String?
+  ativo        Boolean     @default(true)
+  criadoEm     DateTime    @default(now())
+  usuarios     Usuario[]
+  empresas     Empresa[]
+  sindicatos   Sindicato[]
+  feriados     Feriado[]
 }
 
 model Usuario {
