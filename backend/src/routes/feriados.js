@@ -6,7 +6,6 @@ const router = express.Router();
 const prisma = new PrismaClient();
 router.use(authMiddleware);
 
-// Listar feriados do escritório
 router.get('/', async (req, res) => {
   try {
     const feriados = await prisma.feriado.findMany({
@@ -19,8 +18,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Criar feriado
-router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos podem criar feriados
+router.post('/', async (req, res) => {
   try {
     const { nome, dia, mes, cidade, estado } = req.body;
     if (!nome || !dia || !mes) {
@@ -40,8 +39,8 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-// Atualizar feriado
-router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos podem editar
+router.put('/:id', async (req, res) => {
   try {
     const { nome, dia, mes, cidade, estado } = req.body;
     const feriado = await prisma.feriado.update({
@@ -58,7 +57,7 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-// Excluir feriado
+// Só GESTOR/ADMIN podem excluir
 router.delete('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     await prisma.feriado.delete({ where: { id: req.params.id } });
@@ -68,17 +67,14 @@ router.delete('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-// Calcular N-ésimo dia útil para uma empresa em uma competência
 router.get('/calcular', async (req, res) => {
   try {
     const { empresaId, competencia, nDiaUtil } = req.query;
     if (!competencia || !nDiaUtil) {
       return res.status(400).json({ error: 'competencia e nDiaUtil são obrigatórios' });
     }
-
     const [ano, mes] = competencia.split('-').map(Number);
     const n = Number(nDiaUtil);
-
     let cidade = null, estado = null;
     if (empresaId) {
       const empresa = await prisma.empresa.findUnique({
@@ -88,14 +84,11 @@ router.get('/calcular', async (req, res) => {
       cidade = empresa?.cidade || null;
       estado = empresa?.estado || null;
     }
-
     const feriadosMunicipais = await prisma.feriado.findMany({
       where: { escritorioId: req.user.escritorioId }
     });
-
     const { calcularNesimoDiaUtil } = require('../utils/diasUteis');
     const diaCalculado = calcularNesimoDiaUtil(ano, mes, n, feriadosMunicipais, cidade, estado);
-
     res.json({ diaCalculado, cidade, estado, nDiaUtil: n, competencia });
   } catch (e) {
     res.status(500).json({ error: e.message });
