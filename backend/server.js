@@ -12,6 +12,7 @@ const gruposRoutes       = require('./src/routes/grupos');
 const agendaRoutes       = require('./src/routes/agenda');
 const notificacoesRoutes = require('./src/routes/notificacoes');
 const feriadosRoutes     = require('./src/routes/feriados');
+const escritorioRoutes   = require('./src/routes/escritorio');
 
 const app = express();
 
@@ -31,10 +32,9 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // aumenta limite para suportar logo em base64
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
-app.get('/setup', (_req, res) => res.json({ msg: 'Use /api/auth/cadastro para criar um escritório.' }));
 
 app.use('/api/auth',         authRoutes);
 app.use('/api/empresas',     empresasRoutes);
@@ -46,6 +46,7 @@ app.use('/api/grupos',       gruposRoutes);
 app.use('/api/agenda',       agendaRoutes);
 app.use('/api/notificacoes', notificacoesRoutes);
 app.use('/api/feriados',     feriadosRoutes);
+app.use('/api/escritorio',   escritorioRoutes);
 
 app.use((err, req, res, next) => {
   console.error(err.stack);
