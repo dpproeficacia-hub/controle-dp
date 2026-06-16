@@ -16,7 +16,7 @@ router.get('/:competencia', async (req, res) => {
       ativa: true,
       saiuDoEscritorio: false,
       escritorioId: req.user.escritorioId,
-      participaTarefas: true  // só empresas que participam do controle de tarefas
+      participaTarefas: true
     };
 
     if (req.user.nivel === 'OPERADOR') whereEmpresa.responsavelId = req.user.id;
@@ -29,10 +29,11 @@ router.get('/:competencia', async (req, res) => {
         enquadramento: true, anexoSimples: true, tipo: true, nivel: true,
         prazoEntrega: true, temFuncionarios: true, temProLabore: true,
         semMovimento: true, fatorR: true, enviaReinf: true, participaTarefas: true,
+        cidade: true, estado: true,
         responsavel: { select: { id: true, nome: true } },
         gruposTarefa: {
           where: { ativo: true },
-          select: { id: true, diaVencimento: true }
+          select: { id: true, diaVencimento: true, isDiaUtil: true, mesSubsequente: true }
         },
         historicos: {
           where: { competencia },
@@ -47,6 +48,15 @@ router.get('/:competencia', async (req, res) => {
 
     const hoje = new Date();
     const diaHoje = hoje.getDate();
+    const mesHoje = hoje.getMonth() + 1;
+    const anoHoje = hoje.getFullYear();
+
+    // Feriados do escritório para cálculo de dias úteis
+    const feriadosMunicipais = await prisma.feriado.findMany({
+      where: { escritorioId: req.user.escritorioId }
+    });
+
+    const [anoComp, mesComp] = competencia.split('-').map(Number);
 
     const resultado = empresas.map(emp => {
       const historico = emp.historicos[0] || null;
@@ -58,15 +68,33 @@ router.get('/:competencia', async (req, res) => {
         entregasGrupo.filter(eg => eg.entregue || eg.dispensada).map(eg => eg.grupoId)
       );
       const gruposPendentes = emp.gruposTarefa.filter(g => !gruposConcluidosIds.has(g.id));
-      const diaVencimentoMinimo = gruposPendentes.length > 0
-        ? Math.min(...gruposPendentes.map(g => g.diaVencimento))
+
+      // Calcula o prazo real de cada grupo considerando mesSubsequente
+      const prazosReais = gruposPendentes.map(g => {
+        let anoVenc = anoComp;
+        let mesVenc = mesComp;
+
+        if (g.mesSubsequente) {
+          // Prazo no mês seguinte à competência
+          mesVenc = mesComp + 1;
+          if (mesVenc > 12) { mesVenc = 1; anoVenc++; }
+        }
+
+        // Converte para dia absoluto para comparar com hoje
+        const dataVenc = new Date(anoVenc, mesVenc - 1, g.diaVencimento);
+        const diasRestantesReais = Math.floor((dataVenc - new Date(anoHoje, mesHoje - 1, diaHoje)) / 86400000);
+        return { ...g, diasRestantesReais, dataVenc };
+      });
+
+      // Bolinha baseada no prazo real
+      const diaVencimentoMinimo = prazosReais.length > 0
+        ? Math.min(...prazosReais.map(g => g.diasRestantesReais))
         : null;
 
       let bolinha = null;
       if (diaVencimentoMinimo !== null && concluidos < totalGrupos) {
-        const diasRestantes = diaVencimentoMinimo - diaHoje;
-        if (diasRestantes < 0) bolinha = 'vermelho';
-        else if (diasRestantes <= 3) bolinha = 'laranja';
+        if (diaVencimentoMinimo < 0) bolinha = 'vermelho';
+        else if (diaVencimentoMinimo <= 3) bolinha = 'laranja';
         else bolinha = 'azul';
       }
 
@@ -82,12 +110,7 @@ router.get('/:competencia', async (req, res) => {
         temProLabore: emp.temProLabore, semMovimento: emp.semMovimento,
         fatorR: emp.fatorR, enviaReinf: emp.enviaReinf, participaTarefas: emp.participaTarefas,
         responsavel: emp.responsavel,
-        historico: {
-          id: historico?.id || null,
-          competencia,
-          status: statusCalc,
-          entregasGrupo: [],
-        },
+        historico: { id: historico?.id || null, competencia, status: statusCalc, entregasGrupo: [] },
         _totalGrupos: totalGrupos,
         _entregues: concluidos,
         _bolinha: bolinha,
@@ -95,7 +118,6 @@ router.get('/:competencia', async (req, res) => {
       };
     });
 
-    // Ordenação: por prazo de entrega, sem prazo no fim, alfabético como critério secundário
     resultado.sort((a, b) => {
       if (a.prazoEntrega === null && b.prazoEntrega === null) return a.razaoSocial.localeCompare(b.razaoSocial, 'pt-BR');
       if (a.prazoEntrega === null) return 1;
@@ -123,10 +145,7 @@ router.get('/:competencia/:empresaId', async (req, res) => {
       }
     });
     if (!historico) {
-      return res.json({
-        id: null, empresaId, competencia, status: 'NAO_INICIADO',
-        entregasGrupo: [], filiais: []
-      });
+      return res.json({ id: null, empresaId, competencia, status: 'NAO_INICIADO', entregasGrupo: [], filiais: [] });
     }
     res.json(historico);
   } catch (e) {
