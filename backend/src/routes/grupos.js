@@ -51,7 +51,7 @@ router.delete('/subtarefas/:id', requireNivel('GESTOR', 'ADMIN'), async (req, re
 
 router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
-    const { nome, diaVencimento, tipo, subtarefas, empresaIds, inicioCobrancaEm } = req.body;
+    const { nome, diaVencimento, tipo, subtarefas, empresaIds, inicioCobrancaEm, isDiaUtil } = req.body;
     const ids = Array.isArray(empresaIds) ? empresaIds : [empresaIds];
     const criados = [];
     for (const empresaId of ids) {
@@ -60,6 +60,7 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
           empresaId, nome,
           diaVencimento: Number(diaVencimento),
           tipo: tipo || 'RECORRENTE',
+          isDiaUtil: isDiaUtil || false,
           inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null,
           subtarefas: {
             create: (subtarefas || []).map((s, i) => ({
@@ -119,11 +120,14 @@ router.get('/:empresaId/entregas/:competencia', async (req, res) => {
 
 router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
-    const { nome, diaVencimento, tipo, inicioCobrancaEm } = req.body;
+    const { nome, diaVencimento, tipo, inicioCobrancaEm, isDiaUtil } = req.body;
     const grupo = await prisma.grupoTarefa.update({
       where: { id: req.params.id },
       data: {
-        nome, diaVencimento: Number(diaVencimento), tipo,
+        nome,
+        diaVencimento: Number(diaVencimento),
+        tipo,
+        isDiaUtil: isDiaUtil || false,
         inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null
       },
       include: {
@@ -153,7 +157,7 @@ router.post('/:grupoId/subtarefas', requireNivel('GESTOR', 'ADMIN'), async (req,
 router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
   try {
     const { grupoId, competencia, empresaId } = req.params;
-    const { entregue, dispensada, dataEntrega, subtarefas } = req.body;
+    const { entregue, dispensada, dataEntrega, valorImposto, subtarefas } = req.body;
 
     let historico = await prisma.historicoMensal.findUnique({
       where: { empresaId_competencia: { empresaId, competencia } }
@@ -164,28 +168,68 @@ router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
       });
     }
 
+    // Converte valorImposto
+    const valImposto = valorImposto !== undefined && valorImposto !== null && valorImposto !== ''
+      ? parseFloat(String(valorImposto).replace(/[^\d,]/g, '').replace(',', '.')) || null
+      : null;
+
     const entregaGrupo = await prisma.entregaGrupo.upsert({
       where: { grupoId_historicoId: { grupoId, historicoId: historico.id } },
       create: {
-        grupoId, historicoId: historico.id,
+        grupoId,
+        historicoId: historico.id,
         entregue: entregue || false,
         dispensada: dispensada || false,
-        dataEntrega: dataEntrega ? new Date(dataEntrega) : null
+        dataEntrega: dataEntrega ? new Date(dataEntrega) : null,
+        valorImposto: valImposto
       },
       update: {
         entregue: entregue || false,
         dispensada: dispensada || false,
-        dataEntrega: dataEntrega ? new Date(dataEntrega) : null
+        dataEntrega: dataEntrega ? new Date(dataEntrega) : null,
+        valorImposto: valImposto
       }
     });
 
-    // Só salva subtarefas se não foi dispensada
+    // Atualiza status do histórico mensal
+    const todasEntregas = await prisma.entregaGrupo.findMany({
+      where: { historicoId: historico.id }
+    });
+    const todosGrupos = await prisma.grupoTarefa.findMany({
+      where: { empresaId, ativo: true }
+    });
+    const totalGrupos = todosGrupos.length;
+    const concluidos = todasEntregas.filter(e => e.entregue || e.dispensada).length;
+
+    let status = 'NAO_INICIADO';
+    if (totalGrupos > 0 && concluidos >= totalGrupos) status = 'FINALIZADO';
+    else if (concluidos > 0) status = 'PARCIAL';
+
+    await prisma.historicoMensal.update({
+      where: { id: historico.id },
+      data: { status }
+    });
+
+    // Salva subtarefas se não foi dispensada
     if (!dispensada && subtarefas && subtarefas.length > 0) {
       for (const sub of subtarefas) {
         await prisma.entregaSubtarefa.upsert({
-          where: { subtarefaId_entregaGrupoId: { subtarefaId: sub.subtarefaId, entregaGrupoId: entregaGrupo.id } },
-          create: { subtarefaId: sub.subtarefaId, entregaGrupoId: entregaGrupo.id, ok: sub.ok || false, valor: sub.valor || null },
-          update: { ok: sub.ok || false, valor: sub.valor || null }
+          where: {
+            subtarefaId_entregaGrupoId: {
+              subtarefaId: sub.subtarefaId,
+              entregaGrupoId: entregaGrupo.id
+            }
+          },
+          create: {
+            subtarefaId: sub.subtarefaId,
+            entregaGrupoId: entregaGrupo.id,
+            ok: sub.ok || false,
+            valor: sub.valor || null
+          },
+          update: {
+            ok: sub.ok || false,
+            valor: sub.valor || null
+          }
         });
       }
     }
