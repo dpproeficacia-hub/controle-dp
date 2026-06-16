@@ -264,6 +264,7 @@ model GrupoTarefa {
   nome             String
   diaVencimento    Int
   isDiaUtil        Boolean        @default(false)
+  mesSubsequente   Boolean        @default(false)
   tipo             TipoTarefa     @default(RECORRENTE)
   ativo            Boolean        @default(true)
   ordem            Int            @default(0)
