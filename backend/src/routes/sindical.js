@@ -6,8 +6,6 @@ const router = express.Router();
 const prisma = new PrismaClient();
 router.use(authMiddleware);
 
-// ─── SINDICATOS ───────────────────────────────────────────────────────────────
-
 router.get('/sindicatos', async (req, res) => {
   try {
     const sindicatos = await prisma.sindicato.findMany({
@@ -21,6 +19,7 @@ router.get('/sindicatos', async (req, res) => {
   }
 });
 
+// Todos podem criar sindicatos
 router.post('/sindicatos', async (req, res) => {
   try {
     const { nome, dataBase, observacoes, empresasIds } = req.body;
@@ -42,7 +41,8 @@ router.post('/sindicatos', async (req, res) => {
   }
 });
 
-router.put('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos podem editar sindicatos
+router.put('/sindicatos/:id', async (req, res) => {
   try {
     const { nome, dataBase, observacoes, empresasIds } = req.body;
     const sindicato = await prisma.sindicato.update({
@@ -68,6 +68,7 @@ router.put('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) 
   }
 });
 
+// Só GESTOR/ADMIN podem excluir
 router.delete('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     await prisma.sindicato.update({ where: { id: req.params.id }, data: { ativo: false } });
@@ -77,9 +78,6 @@ router.delete('/sindicatos/:id', requireNivel('GESTOR', 'ADMIN'), async (req, re
   }
 });
 
-// ─── CONTROLE SINDICAL ────────────────────────────────────────────────────────
-
-// Lista TODAS as empresas do escritório (sem filtro de funcionários)
 router.get('/', async (req, res) => {
   try {
     const controles = await prisma.controleSindical.findMany({
@@ -100,7 +98,6 @@ router.put('/:empresaId', async (req, res) => {
   try {
     const { sindicatoId, ultimaCct, reajusteAplicado } = req.body;
 
-    // Busca estado anterior para detectar mudança de reajuste
     const anterior = await prisma.controleSindical.findUnique({
       where: { empresaId: req.params.empresaId },
       include: { empresa: { select: { razaoSocial: true, escritorioId: true } }, sindicato: true }
@@ -122,17 +119,14 @@ router.put('/:empresaId', async (req, res) => {
       include: { sindicato: true }
     });
 
-    // Se reajuste foi marcado como aplicado, cria notificação para outros usuários
     if (reajusteAplicado && (!anterior || !anterior.reajusteAplicado)) {
       const empresa = anterior?.empresa;
       const sindicatoNome = controle.sindicato?.nome || 'Sindicato';
       if (empresa) {
-        // Busca todos os usuários do escritório exceto o que fez a ação
         const usuarios = await prisma.usuario.findMany({
           where: { escritorioId: empresa.escritorioId, ativo: true, id: { not: req.user.id } },
           select: { id: true }
         });
-        // Salva notificações no banco
         for (const u of usuarios) {
           await prisma.notificacao.create({
             data: {
@@ -142,7 +136,7 @@ router.put('/:empresaId', async (req, res) => {
               mensagem: `O reajuste do ${sindicatoNome} foi aplicado em ${empresa.razaoSocial}.`,
               lida: false
             }
-          }).catch(() => {}); // ignora se model não existir ainda
+          }).catch(() => {});
         }
       }
     }
