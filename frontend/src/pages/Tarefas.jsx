@@ -29,19 +29,15 @@ const ANOS = Array.from({ length: 6 }, (_, i) => anoAtual - 1 + i);
 
 const formVazio = {
   nome: '', diaVencimento: '', tipo: 'RECORRENTE',
-  inicioMes: '', inicioAno: '', isDiaUtil: false,
+  inicioMes: '', inicioAno: '', isDiaUtil: false, mesSubsequente: false,
   escopo: 'todas', empresaId: '', empresasIds: [], subtarefas: [],
-  _novaSubTemValor: false,
+  _novaSub: '', _novaSubTemValor: false,
 };
 
 const Checkbox = ({ checked, onClick, indeterminate }) => (
   <div onClick={onClick}
     className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer flex-shrink-0 transition-colors ${checked || indeterminate ? 'bg-ink border-ink' : 'border-border2 hover:border-muted'}`}>
-    {checked && (
-      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-        <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    )}
+    {checked && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>}
     {indeterminate && !checked && <div className="w-2 h-0.5 bg-white rounded" />}
   </div>
 );
@@ -54,7 +50,7 @@ export default function Tarefas() {
   const [todasEmpresas, setTodasEmpresas] = useState([]);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState(formVazio);
-  const [editandoGrupo, setEditandoGrupo] = useState(null); // grupo agrupado sendo editado
+  const [editandoGrupo, setEditandoGrupo] = useState(null);
   const [salvando, setSalvando] = useState(false);
   const [mostraForm, setMostraForm] = useState(false);
   const [buscaInput, setBuscaInput] = useState('');
@@ -63,7 +59,11 @@ export default function Tarefas() {
   const [buscaEmpresaForm, setBuscaEmpresaForm] = useState('');
   const [selecionadas, setSelecionadas] = useState([]);
   const [excluindoLote, setExcluindoLote] = useState(false);
-  const [expandido, setExpandido] = useState({}); // quais grupos estão com empresas expandidas
+  const [expandido, setExpandido] = useState({});
+  const [gerenciando, setGerenciando] = useState(null); // chave do grupo sendo gerenciado
+  const [empGerenciar, setEmpGerenciar] = useState([]); // empresas selecionadas no modal
+  const [salvandoGerenciar, setSalvandoGerenciar] = useState(false);
+  const [buscaGerenciar, setBuscaGerenciar] = useState('');
   const { isGestor } = useAuth();
 
   useEffect(() => { api.get('/empresas').then(r => setTodasEmpresas(r.data)); }, []);
@@ -117,11 +117,43 @@ export default function Tarefas() {
       diaVencimento: grupo.diaVencimento,
       tipo: grupo.tipo,
       isDiaUtil: grupo.isDiaUtil || false,
+      mesSubsequente: grupo.mesSubsequente || false,
       inicioMes, inicioAno,
       subtarefas: (grupo.subtarefas || []).map(s => ({ nome: s.nome, temValor: s.temValor })),
     });
     setMostraForm(true);
     window.scrollTo(0, 0);
+  }
+
+  function abrirGerenciar(grupo) {
+    const chave = grupo.nome + '||' + grupo.diaVencimento;
+    setGerenciando({ ...grupo, chave });
+    setEmpGerenciar(grupo.empresas.map(e => e.id));
+    setBuscaGerenciar('');
+  }
+
+  async function salvarGerenciar() {
+    if (!gerenciando) return;
+    setSalvandoGerenciar(true);
+    try {
+      const idsAtuais = gerenciando.empresas.map(e => e.id);
+      const adicionar = empGerenciar.filter(id => !idsAtuais.includes(id));
+      const remover = idsAtuais.filter(id => !empGerenciar.includes(id));
+
+      await api.post('/grupos/gerenciar-empresas', {
+        nomeGrupo: gerenciando.nome,
+        diaVencimento: gerenciando.diaVencimento,
+        tipo: gerenciando.tipo,
+        adicionar,
+        remover,
+      });
+      setGerenciando(null);
+      carregar(page, filtroBusca);
+    } catch (err) {
+      alert(err.response?.data?.error || 'Erro ao atualizar empresas.');
+    } finally {
+      setSalvandoGerenciar(false);
+    }
   }
 
   function toggleEmpresa(id) {
@@ -149,21 +181,18 @@ export default function Tarefas() {
   }
 
   async function excluirEmLote() {
-    const gruposSelecionados = grupos.filter(g => selecionadas.includes(g.nome + '||' + g.diaVencimento));
-    const totalEmpresas = gruposSelecionados.reduce((acc, g) => acc + g.empresas.length, 0);
-    const nomes = gruposSelecionados.map(g => `${g.nome} (${g.empresas.length} empresa${g.empresas.length !== 1 ? 's' : ''})`);
-    if (!window.confirm(`REMOVER ${gruposSelecionados.length} tarefa(s) de ${totalEmpresas} empresa(s)?\n\n${nomes.join('\n')}\n\nEsta ação não pode ser desfeita.`)) return;
+    const gruposSel = grupos.filter(g => selecionadas.includes(g.nome + '||' + g.diaVencimento));
+    const totalEmp = gruposSel.reduce((acc, g) => acc + g.empresas.length, 0);
+    const nomes = gruposSel.map(g => `${g.nome} (${g.empresas.length} empresa${g.empresas.length !== 1 ? 's' : ''})`);
+    if (!window.confirm(`REMOVER ${gruposSel.length} tarefa(s) de ${totalEmp} empresa(s)?\n\n${nomes.join('\n')}\n\nEsta ação não pode ser desfeita.`)) return;
     setExcluindoLote(true);
     try {
-      const todosIds = gruposSelecionados.flatMap(g => g.ids);
+      const todosIds = gruposSel.flatMap(g => g.ids);
       await api.delete('/grupos/lote', { data: { ids: todosIds } });
       carregar(1, filtroBusca);
       setPage(1);
-    } catch {
-      alert('Erro ao excluir tarefas.');
-    } finally {
-      setExcluindoLote(false);
-    }
+    } catch { alert('Erro ao excluir tarefas.'); }
+    finally { setExcluindoLote(false); }
   }
 
   async function excluirGrupo(grupo) {
@@ -176,22 +205,20 @@ export default function Tarefas() {
     e.preventDefault();
     let inicioCobrancaEm = null;
     if (form.inicioMes && form.inicioAno) inicioCobrancaEm = `${form.inicioAno}-${form.inicioMes}-01`;
-
     setSalvando(true);
     try {
       if (editandoGrupo) {
-        // Edita todas as cópias de uma vez
         await api.put('/grupos/lote', {
           ids: editandoGrupo.ids,
           nome: form.nome,
           diaVencimento: Number(form.diaVencimento),
           isDiaUtil: form.isDiaUtil || false,
+          mesSubsequente: form.mesSubsequente || false,
           tipo: form.tipo,
           inicioCobrancaEm,
           subtarefas: form.subtarefas,
         });
       } else {
-        // Cria nova tarefa
         let empresaIds;
         if (form.escopo === 'todas') empresaIds = todasEmpresas.map(e => e.id);
         else if (form.escopo === 'uma') {
@@ -203,8 +230,8 @@ export default function Tarefas() {
         }
         await api.post('/grupos', {
           nome: form.nome, diaVencimento: Number(form.diaVencimento),
-          isDiaUtil: form.isDiaUtil || false, tipo: form.tipo,
-          inicioCobrancaEm, subtarefas: form.subtarefas, empresaIds,
+          isDiaUtil: form.isDiaUtil || false, mesSubsequente: form.mesSubsequente || false,
+          tipo: form.tipo, inicioCobrancaEm, subtarefas: form.subtarefas, empresaIds,
         });
       }
       cancelar();
@@ -228,8 +255,67 @@ export default function Tarefas() {
   const todasSelecionadas = grupos.length > 0 && selecionadas.length === grupos.length;
   const algumasSelecionadas = selecionadas.length > 0 && selecionadas.length < grupos.length;
 
+  const empresasGerenciarFiltradas = todasEmpresas.filter(e =>
+    !buscaGerenciar || e.razaoSocial.toLowerCase().includes(buscaGerenciar.toLowerCase())
+  );
+
   return (
     <div>
+      {/* Modal de gerenciar empresas — disponível para TODOS */}
+      {gerenciando && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border bg-surface2">
+              <div>
+                <p className="text-sm font-semibold text-ink">Gerenciar empresas</p>
+                <p className="text-xs text-faint mt-0.5">"{gerenciando.nome}" — selecione as empresas vinculadas</p>
+              </div>
+              <button onClick={() => setGerenciando(null)} className="text-faint hover:text-ink">✕</button>
+            </div>
+            <div className="p-4">
+              <div className="flex items-center justify-between mb-2">
+                <input className="input flex-1 text-xs h-8 mr-2" placeholder="Buscar empresa..."
+                  value={buscaGerenciar} onChange={e => setBuscaGerenciar(e.target.value)} />
+                <button type="button"
+                  onClick={() => {
+                    const ids = empresasGerenciarFiltradas.map(e => e.id);
+                    const todasMarcadas = ids.every(id => empGerenciar.includes(id));
+                    if (todasMarcadas) setEmpGerenciar(prev => prev.filter(id => !ids.includes(id)));
+                    else setEmpGerenciar(prev => [...new Set([...prev, ...ids])]);
+                  }}
+                  className="text-xs text-blue-600 hover:underline flex-shrink-0">
+                  Selec. todas
+                </button>
+              </div>
+              <div className="border border-border rounded-lg max-h-64 overflow-y-auto">
+                {empresasGerenciarFiltradas.map(emp => (
+                  <label key={emp.id}
+                    className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface2 cursor-pointer border-b border-border last:border-b-0">
+                    <div onClick={() => setEmpGerenciar(prev => prev.includes(emp.id) ? prev.filter(x => x !== emp.id) : [...prev, emp.id])}
+                      className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer transition-colors ${empGerenciar.includes(emp.id) ? 'bg-ink border-ink' : 'border-border2'}`}>
+                      {empGerenciar.includes(emp.id) && (
+                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>
+                      )}
+                    </div>
+                    <p className="text-sm text-ink truncate flex-1">{emp.razaoSocial}</p>
+                    {empGerenciar.includes(emp.id) && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />}
+                  </label>
+                ))}
+              </div>
+              <p className="text-xs text-muted mt-2">{empGerenciar.length} empresa(s) selecionada(s)</p>
+            </div>
+            <div className="flex gap-3 px-5 py-4 border-t border-border">
+              <button onClick={salvarGerenciar} disabled={salvandoGerenciar} className="btn btn-primary flex-1 justify-center">
+                {salvandoGerenciar
+                  ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
+                  : 'Salvar'}
+              </button>
+              <button onClick={() => setGerenciando(null)} className="btn btn-secondary">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between mb-4">
         <div>
           <h2 className="font-display font-bold text-lg text-ink">Tarefas</h2>
@@ -245,9 +331,7 @@ export default function Tarefas() {
       {mostraForm && isGestor && (
         <form onSubmit={salvar} className="card p-5 mb-6 max-w-2xl">
           <p className="text-sm font-semibold text-ink mb-4">
-            {editandoGrupo
-              ? `Editar "${editandoGrupo.nome}" — ${editandoGrupo.empresas.length} empresa(s)`
-              : 'Nova tarefa'}
+            {editandoGrupo ? `Editar "${editandoGrupo.nome}" — ${editandoGrupo.empresas.length} empresa(s)` : 'Nova tarefa'}
           </p>
           {editandoGrupo && (
             <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2 mb-4 text-xs text-blue-700">
@@ -265,18 +349,25 @@ export default function Tarefas() {
 
               <div className="col-span-2">
                 <label className="label">{form.isDiaUtil ? 'Nº dia útil de vencimento' : 'Dia de vencimento'}</label>
-                <div className="flex gap-2 items-center">
-                  <input className="input flex-1" type="number" min="1" max="31" required
+                <div className="flex gap-2 items-center flex-wrap">
+                  <input className="input w-24" type="number" min="1" max="31" required
                     value={form.diaVencimento}
                     onChange={e => setForm(f => ({ ...f, diaVencimento: e.target.value }))}
-                    placeholder={form.isDiaUtil ? 'Ex: 5 (5º dia útil)' : 'Ex: 7'} />
+                    placeholder={form.isDiaUtil ? 'Ex: 5' : 'Ex: 7'} />
                   <div onClick={() => setForm(f => ({ ...f, isDiaUtil: !f.isDiaUtil }))}
-                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer select-none transition-all flex-shrink-0 text-xs font-semibold ${form.isDiaUtil ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer select-none transition-all text-xs font-semibold ${form.isDiaUtil ? 'bg-blue-600 text-white border-blue-600' : 'bg-surface text-muted border-border hover:border-border2'}`}>
                     {form.isDiaUtil ? '✓ Dia útil' : 'Dia útil?'}
+                  </div>
+                  <div onClick={() => setForm(f => ({ ...f, mesSubsequente: !f.mesSubsequente }))}
+                    className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border cursor-pointer select-none transition-all text-xs font-semibold ${form.mesSubsequente ? 'bg-amber-500 text-white border-amber-500' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+                    {form.mesSubsequente ? '✓ Mês seguinte' : 'Mês seguinte?'}
                   </div>
                 </div>
                 <p className="text-xs text-faint mt-1">
-                  {form.isDiaUtil ? `Calculará o ${form.diaVencimento || 'N'}º dia útil (Seg–Sáb), considerando feriados da cidade da empresa` : 'Dia fixo do mês'}
+                  {form.isDiaUtil && form.mesSubsequente && `${form.diaVencimento || 'N'}º dia útil do mês seguinte à competência`}
+                  {form.isDiaUtil && !form.mesSubsequente && `${form.diaVencimento || 'N'}º dia útil do mesmo mês da competência`}
+                  {!form.isDiaUtil && form.mesSubsequente && `Dia ${form.diaVencimento || 'N'} do mês seguinte à competência`}
+                  {!form.isDiaUtil && !form.mesSubsequente && `Dia ${form.diaVencimento || 'N'} do mesmo mês da competência`}
                 </p>
               </div>
 
@@ -289,10 +380,7 @@ export default function Tarefas() {
               </div>
 
               <div className="col-span-2">
-                <label className="label">
-                  Início de cobrança
-                  <span className="text-faint font-normal ml-1">(opcional)</span>
-                </label>
+                <label className="label">Início de cobrança <span className="text-faint font-normal">(opcional)</span></label>
                 <div className="flex gap-2">
                   <select className="select flex-1" value={form.inicioMes} onChange={e => setForm(f => ({ ...f, inicioMes: e.target.value }))}>
                     <option value="">Mês</option>
@@ -303,13 +391,12 @@ export default function Tarefas() {
                     {ANOS.map(a => <option key={a} value={a}>{a}</option>)}
                   </select>
                   {(form.inicioMes || form.inicioAno) && (
-                    <button type="button" onClick={() => setForm(f => ({ ...f, inicioMes: '', inicioAno: '' }))} className="btn btn-secondary text-xs px-3 flex-shrink-0">Limpar</button>
+                    <button type="button" onClick={() => setForm(f => ({ ...f, inicioMes: '', inicioAno: '' }))} className="btn btn-secondary text-xs px-3">Limpar</button>
                   )}
                 </div>
               </div>
             </div>
 
-            {/* Escopo — só na criação */}
             {!editandoGrupo && (
               <div>
                 <label className="label mb-2">Aplicar para</label>
@@ -322,7 +409,6 @@ export default function Tarefas() {
                     </button>
                   ))}
                 </div>
-
                 {(form.escopo === 'uma' || form.escopo === 'selecionar') && (
                   <div className="flex gap-1.5 flex-wrap mb-2">
                     {FILTROS_TIPO.map(f => (
@@ -333,7 +419,6 @@ export default function Tarefas() {
                     ))}
                   </div>
                 )}
-
                 {form.escopo === 'uma' && (
                   <div>
                     <select className="select" required value={form.empresaId} onChange={e => setForm(f => ({ ...f, empresaId: e.target.value }))}>
@@ -343,7 +428,6 @@ export default function Tarefas() {
                     <p className="text-xs text-faint mt-1">{empresasFiltradas.length} empresa(s) no filtro</p>
                   </div>
                 )}
-
                 {form.escopo === 'selecionar' && (
                   <div>
                     <div className="flex items-center justify-between mb-1.5">
@@ -358,9 +442,7 @@ export default function Tarefas() {
                         <label key={emp.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-surface2 cursor-pointer border-b border-border last:border-b-0">
                           <div onClick={() => toggleEmpresa(emp.id)}
                             className={`w-4 h-4 rounded border flex items-center justify-center flex-shrink-0 cursor-pointer ${form.empresasIds.includes(emp.id) ? 'bg-ink border-ink' : 'border-border2'}`}>
-                            {form.empresasIds.includes(emp.id) && (
-                              <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>
-                            )}
+                            {form.empresasIds.includes(emp.id) && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" /></svg>}
                           </div>
                           <p className="text-sm text-ink truncate flex-1">{emp.razaoSocial}</p>
                           {form.empresasIds.includes(emp.id) && <span className="w-2 h-2 rounded-full bg-green-500 flex-shrink-0" />}
@@ -370,19 +452,12 @@ export default function Tarefas() {
                     {form.empresasIds.length > 0 && <p className="text-xs text-muted mt-1">{form.empresasIds.length} empresa(s) selecionada(s)</p>}
                   </div>
                 )}
-
-                {form.escopo === 'todas' && (
-                  <p className="text-xs text-muted mt-1">A tarefa será criada para as <strong>{todasEmpresas.length}</strong> empresas.</p>
-                )}
+                {form.escopo === 'todas' && <p className="text-xs text-muted mt-1">A tarefa será criada para as <strong>{todasEmpresas.length}</strong> empresas.</p>}
               </div>
             )}
 
-            {/* Subtarefas */}
             <div>
-              <label className="label mb-2">
-                Subtarefas
-                <span className="text-faint font-normal ml-1 text-xs">— marque "tem valor" para INSS, FGTS, IR etc.</span>
-              </label>
+              <label className="label mb-2">Subtarefas <span className="text-faint font-normal text-xs">— marque "tem valor" para INSS, FGTS, IR etc.</span></label>
               {form.subtarefas.length > 0 && (
                 <div className="space-y-1 mb-2">
                   {form.subtarefas.map((s, i) => (
@@ -404,7 +479,7 @@ export default function Tarefas() {
                       setForm(f => ({ ...f, subtarefas: [...f.subtarefas, { nome: f._novaSub.trim(), temValor: f._novaSubTemValor || false }], _novaSub: '', _novaSubTemValor: false }));
                     }
                   }}
-                  placeholder="Nome da subtarefa (ex: INSS, FGTS, Holerith...)" />
+                  placeholder="Nome da subtarefa..." />
                 <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0 px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
                   <input type="checkbox" checked={form._novaSubTemValor || false}
                     onChange={e => setForm(f => ({ ...f, _novaSubTemValor: e.target.checked }))} className="accent-ink" />
@@ -431,12 +506,10 @@ export default function Tarefas() {
         </form>
       )}
 
-      {/* Barra de busca */}
       <div className="mb-4 flex items-center gap-3 flex-wrap">
         <input className="input max-w-xs" placeholder="Buscar por nome da tarefa..."
           value={buscaInput} onChange={e => setBuscaInput(e.target.value)} />
         <span className="text-xs text-faint">{total} tarefa(s) única(s)</span>
-
         {isGestor && selecionadas.length > 0 && (
           <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg ml-auto">
             <span className="text-xs font-semibold text-red-700">{selecionadas.length} selecionada(s)</span>
@@ -477,11 +550,7 @@ export default function Tarefas() {
                   return (
                     <>
                       <tr key={chave} className={`border-b border-border hover:bg-surface2 transition-colors ${isSelecionado ? 'bg-red-50' : ''}`}>
-                        {isGestor && (
-                          <td className="px-4 py-3 w-8">
-                            <Checkbox checked={isSelecionado} onClick={() => toggleSelecao(chave)} />
-                          </td>
-                        )}
+                        {isGestor && <td className="px-4 py-3 w-8"><Checkbox checked={isSelecionado} onClick={() => toggleSelecao(chave)} /></td>}
                         <td className="px-4 py-3">
                           <p className="text-sm font-semibold text-ink">{grupo.nome}</p>
                         </td>
@@ -489,39 +558,48 @@ export default function Tarefas() {
                           <p className="text-sm text-muted">
                             {grupo.isDiaUtil ? `${grupo.diaVencimento}º dia útil` : `Dia ${grupo.diaVencimento}`}
                           </p>
-                          {grupo.isDiaUtil && <p className="text-[10px] text-blue-600">Seg–Sáb</p>}
+                          <p className="text-[10px] text-faint mt-0.5">
+                            {grupo.mesSubsequente ? '📅 mês seguinte' : 'mesmo mês'}
+                            {grupo.isDiaUtil && ' · Seg–Sáb'}
+                          </p>
                         </td>
                         <td className="px-4 py-3">
                           <span className={`pill text-[10px] ${grupo.tipo === 'RECORRENTE' ? 'pill-blue' : 'pill-amber'}`}>
                             {grupo.tipo === 'RECORRENTE' ? 'Recorrente' : 'Pontual'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted">
-                          {fmtInicio(grupo.inicioCobrancaEm) || <span className="text-faint">—</span>}
-                        </td>
+                        <td className="px-4 py-3 text-sm text-muted">{fmtInicio(grupo.inicioCobrancaEm) || <span className="text-faint">—</span>}</td>
                         <td className="px-4 py-3">
                           {grupo.subtarefas?.length > 0
                             ? <span className="pill pill-gray text-[10px]">{grupo.subtarefas.length} sub</span>
                             : <span className="text-faint">—</span>}
                         </td>
                         <td className="px-4 py-3">
-                          <button
-                            onClick={() => setExpandido(prev => ({ ...prev, [chave]: !prev[chave] }))}
-                            className={`pill text-[10px] cursor-pointer transition-colors ${isExpandido ? 'pill-blue' : 'pill-gray hover:pill-blue'}`}>
-                            {grupo.empresas.length} empresa{grupo.empresas.length !== 1 ? 's' : ''} {isExpandido ? '▲' : '▼'}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => setExpandido(prev => ({ ...prev, [chave]: !prev[chave] }))}
+                              className={`pill text-[10px] cursor-pointer transition-colors ${isExpandido ? 'pill-blue' : 'pill-gray hover:pill-blue'}`}>
+                              {grupo.empresas.length} empresa{grupo.empresas.length !== 1 ? 's' : ''} {isExpandido ? '▲' : '▼'}
+                            </button>
+                          </div>
                         </td>
                         <td className="px-4 py-3">
-                          {isGestor && (
-                            <div className="flex items-center gap-3 justify-end">
-                              <button onClick={() => iniciarEdicao(grupo)} className="text-xs text-blue-600 hover:underline">Editar</button>
-                              <button onClick={() => excluirGrupo(grupo)} className="text-xs text-red-500 hover:underline">Remover</button>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2 justify-end">
+                            {/* Gerenciar empresas — disponível para TODOS */}
+                            <button onClick={() => abrirGerenciar(grupo)}
+                              className="text-xs text-green-600 hover:underline">
+                              + Empresas
+                            </button>
+                            {isGestor && (
+                              <>
+                                <button onClick={() => iniciarEdicao(grupo)} className="text-xs text-blue-600 hover:underline">Editar</button>
+                                <button onClick={() => excluirGrupo(grupo)} className="text-xs text-red-500 hover:underline">Remover</button>
+                              </>
+                            )}
+                          </div>
                         </td>
                       </tr>
 
-                      {/* Linha expandida com empresas vinculadas */}
                       {isExpandido && (
                         <tr key={chave + '_expand'} className="border-b border-border bg-blue-50/50">
                           <td colSpan={isGestor ? 8 : 7} className="px-6 py-3">
@@ -546,9 +624,7 @@ export default function Tarefas() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between mt-4">
-              <p className="text-xs text-faint">
-                Mostrando {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, total)} de {total}
-              </p>
+              <p className="text-xs text-faint">Mostrando {((page - 1) * LIMIT) + 1}–{Math.min(page * LIMIT, total)} de {total}</p>
               <div className="flex items-center gap-2">
                 <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="btn btn-secondary text-xs disabled:opacity-40">← Anterior</button>
                 <span className="text-xs text-muted px-2">{page} / {totalPages}</span>
