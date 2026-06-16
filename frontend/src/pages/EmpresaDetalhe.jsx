@@ -17,6 +17,8 @@ export default function EmpresaDetalhe() {
   const [grupos, setGrupos] = useState([]);
   const [entregas, setEntregas] = useState({});
   const [valores, setValores] = useState({});
+  const [datas, setDatas] = useState({});       // data de entrega por grupo
+  const [valorGrupo, setValorGrupo] = useState({}); // valor do imposto por grupo
   const [salvando, setSalvando] = useState({});
   const [salvo, setSalvo] = useState({});
   const [mostraForm, setMostraForm] = useState(false);
@@ -73,6 +75,19 @@ export default function EmpresaDetalhe() {
     return s?.valor ? fmtMoeda(s.valor) : '';
   }
 
+  function getDataEntrega(grupoId) {
+    if (datas[grupoId] !== undefined) return datas[grupoId];
+    const eg = entregas[grupoId];
+    if (!eg?.dataEntrega) return '';
+    return eg.dataEntrega.slice(0, 10);
+  }
+
+  function getValorGrupo(grupoId) {
+    if (valorGrupo[grupoId] !== undefined) return valorGrupo[grupoId];
+    const eg = entregas[grupoId];
+    return eg?.valorImposto ? fmtMoeda(eg.valorImposto) : '';
+  }
+
   function toggleSubtarefa(grupoId, subtarefaId) {
     setEntregas(prev => {
       const eg = prev[grupoId] || { grupoId, entregue: false, dispensada: false, subtarefas: [] };
@@ -100,6 +115,10 @@ export default function EmpresaDetalhe() {
         dataEntrega: entregue ? hoje : null
       }
     }));
+    // preenche data automaticamente com hoje ao marcar entregue
+    if (entregue) {
+      setDatas(prev => ({ ...prev, [grupoId]: hoje }));
+    }
   }
 
   async function salvarGrupo(grupo) {
@@ -112,13 +131,22 @@ export default function EmpresaDetalhe() {
         const valNum = parseFloat(valStr.replace(/[^\d,]/g, '').replace(',', '.')) || null;
         return { subtarefaId: s.id, ok: isSubtarefaOk(grupo.id, s.id), valor: valNum };
       });
+
+      // Valor do imposto do grupo
+      const valGrupoStr = valorGrupo[grupo.id] || '';
+      const valGrupoNum = parseFloat(valGrupoStr.replace(/[^\d,]/g, '').replace(',', '.')) || null;
+
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
         entregue: eg.entregue || false,
         dispensada: eg.dispensada || false,
-        dataEntrega: eg.dataEntrega || null,
+        dataEntrega: datas[grupo.id] || eg.dataEntrega || null,
+        valorImposto: valGrupoNum,
         subtarefas: subtarefasPayload
       });
       await carregarDados();
+      // Limpa estados locais após salvar
+      setDatas(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
+      setValorGrupo(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
       setSalvo(prev => ({ ...prev, [grupo.id]: true }));
       setTimeout(() => setSalvo(prev => ({ ...prev, [grupo.id]: false })), 2000);
     } catch {
@@ -133,10 +161,7 @@ export default function EmpresaDetalhe() {
     setSalvando(prev => ({ ...prev, [grupo.id]: true }));
     try {
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
-        entregue: false,
-        dispensada: true,
-        dataEntrega: null,
-        subtarefas: []
+        entregue: false, dispensada: true, dataEntrega: null, subtarefas: []
       });
       await carregarDados();
       setSalvo(prev => ({ ...prev, [grupo.id]: true }));
@@ -148,14 +173,27 @@ export default function EmpresaDetalhe() {
     }
   }
 
+  async function desfazerEntrega(grupo) {
+    setSalvando(prev => ({ ...prev, [grupo.id]: true }));
+    try {
+      await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
+        entregue: false, dispensada: false, dataEntrega: null, valorImposto: null, subtarefas: []
+      });
+      await carregarDados();
+      setDatas(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
+      setValorGrupo(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
+    } catch {
+      alert('Erro ao desfazer entrega.');
+    } finally {
+      setSalvando(prev => ({ ...prev, [grupo.id]: false }));
+    }
+  }
+
   async function desfazerDispensa(grupo) {
     setSalvando(prev => ({ ...prev, [grupo.id]: true }));
     try {
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
-        entregue: false,
-        dispensada: false,
-        dataEntrega: null,
-        subtarefas: []
+        entregue: false, dispensada: false, dataEntrega: null, subtarefas: []
       });
       await carregarDados();
     } catch {
@@ -248,7 +286,6 @@ export default function EmpresaDetalhe() {
         </div>
       </div>
 
-      {/* Aviso quando empresa não participa de tarefas */}
       {!empresa.participaTarefas && (
         <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-3">
           <span className="text-amber-600 text-lg">⚠️</span>
@@ -367,7 +404,6 @@ export default function EmpresaDetalhe() {
             </form>
           )}
 
-          {/* Lista de grupos */}
           {gruposFiltrados.length === 0 && (
             <div className="card p-10 text-center">
               <p className="text-sm text-faint">
@@ -386,9 +422,11 @@ export default function EmpresaDetalhe() {
               const entregue = isGrupoEntregue(grupo.id);
               const today = new Date().getDate();
               const atrasado = !concluido && grupo.diaVencimento < today;
+              const dataEntregaAtual = getDataEntrega(grupo.id);
+              const valorImpostoAtual = getValorGrupo(grupo.id);
 
               return (
-                <div key={grupo.id} className={`card overflow-hidden ${concluido ? 'opacity-70' : ''}`}>
+                <div key={grupo.id} className={`card overflow-hidden ${concluido ? 'opacity-80' : ''}`}>
                   <div className={`card-header ${dispensado ? 'bg-gray-50' : atrasado ? 'bg-red-50' : entregue ? 'bg-green-50' : 'bg-surface2'}`}>
                     <div className="flex items-center gap-3">
                       <div className={`px-2.5 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${dispensado ? 'bg-gray-100 text-gray-500' : atrasado ? 'bg-red-100 text-red-700' : entregue ? 'bg-green-100 text-green-700' : 'bg-white border border-border text-muted'}`}>
@@ -426,12 +464,12 @@ export default function EmpresaDetalhe() {
                     </div>
                   </div>
 
-                  {/* Subtarefas — ocultas se dispensada */}
+                  {/* Subtarefas */}
                   {grupo.subtarefas?.length > 0 && !dispensado && (
                     <div>
                       {grupo.subtarefas.map(sub => (
-                        <div key={sub.id} onClick={() => toggleSubtarefa(grupo.id, sub.id)}
-                          className={`check-item ${isSubtarefaOk(grupo.id, sub.id) ? 'done' : ''}`}>
+                        <div key={sub.id} onClick={() => !entregue && toggleSubtarefa(grupo.id, sub.id)}
+                          className={`check-item ${isSubtarefaOk(grupo.id, sub.id) ? 'done' : ''} ${entregue ? 'cursor-default' : ''}`}>
                           <div className={`check-box ${isSubtarefaOk(grupo.id, sub.id) ? 'done' : ''}`}>
                             {isSubtarefaOk(grupo.id, sub.id) && (
                               <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
@@ -444,6 +482,7 @@ export default function EmpresaDetalhe() {
                             <input onClick={e => e.stopPropagation()}
                               className="input w-32 text-xs h-8"
                               placeholder="R$ 0,00"
+                              disabled={entregue}
                               value={getValorSubtarefa(grupo.id, sub.id)}
                               onChange={e => setValorSubtarefa(grupo.id, sub.id, e.target.value)} />
                           )}
@@ -455,11 +494,52 @@ export default function EmpresaDetalhe() {
                     </div>
                   )}
 
-                  {/* Rodapé do card */}
+                  {/* Campos de data e valor — visíveis quando marcado como entregue OU sempre editáveis */}
+                  {!dispensado && (
+                    <div className="px-5 py-3 border-t border-border bg-surface2/50">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="label mb-1">
+                            Data de entrega
+                            <span className="text-faint font-normal ml-1">(opcional)</span>
+                          </label>
+                          <input
+                            type="date"
+                            className="input text-xs h-8"
+                            value={dataEntregaAtual}
+                            disabled={entregue && !isGestor}
+                            onChange={e => setDatas(prev => ({ ...prev, [grupo.id]: e.target.value }))} />
+                        </div>
+                        <div>
+                          <label className="label mb-1">
+                            Valor do imposto
+                            <span className="text-faint font-normal ml-1">(opcional)</span>
+                          </label>
+                          <input
+                            className="input text-xs h-8"
+                            placeholder="R$ 0,00"
+                            value={valorImpostoAtual}
+                            disabled={entregue && !isGestor}
+                            onChange={e => setValorGrupo(prev => ({ ...prev, [grupo.id]: e.target.value }))} />
+                        </div>
+                      </div>
+                      {/* Mostra data e valor salvos quando entregue */}
+                      {entregue && entregas[grupo.id]?.dataEntrega && (
+                        <p className="text-xs text-green-700 mt-2">
+                          ✓ Entregue em {new Date(entregas[grupo.id].dataEntrega).toLocaleDateString('pt-BR')}
+                          {entregas[grupo.id]?.valorImposto && (
+                            <span className="ml-2">· {fmtMoeda(entregas[grupo.id].valorImposto)}</span>
+                          )}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Rodapé */}
                   <div className="px-5 py-3 bg-surface2 border-t border-border flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {entregue && !dispensado && (
-                        <button onClick={() => marcarGrupoEntregue(grupo.id, false)}
+                        <button onClick={() => desfazerEntrega(grupo)}
                           className="text-xs text-amber-600 hover:underline">
                           Desfazer entrega
                         </button>
