@@ -17,8 +17,7 @@ export default function EmpresaDetalhe() {
   const [grupos, setGrupos] = useState([]);
   const [entregas, setEntregas] = useState({});
   const [valores, setValores] = useState({});
-  const [datas, setDatas] = useState({});       // data de entrega por grupo
-  const [valorGrupo, setValorGrupo] = useState({}); // valor do imposto por grupo
+  const [datas, setDatas] = useState({});
   const [salvando, setSalvando] = useState({});
   const [salvo, setSalvo] = useState({});
   const [mostraForm, setMostraForm] = useState(false);
@@ -82,12 +81,6 @@ export default function EmpresaDetalhe() {
     return eg.dataEntrega.slice(0, 10);
   }
 
-  function getValorGrupo(grupoId) {
-    if (valorGrupo[grupoId] !== undefined) return valorGrupo[grupoId];
-    const eg = entregas[grupoId];
-    return eg?.valorImposto ? fmtMoeda(eg.valorImposto) : '';
-  }
-
   function toggleSubtarefa(grupoId, subtarefaId) {
     setEntregas(prev => {
       const eg = prev[grupoId] || { grupoId, entregue: false, dispensada: false, subtarefas: [] };
@@ -115,7 +108,6 @@ export default function EmpresaDetalhe() {
         dataEntrega: entregue ? hoje : null
       }
     }));
-    // preenche data automaticamente com hoje ao marcar entregue
     if (entregue) {
       setDatas(prev => ({ ...prev, [grupoId]: hoje }));
     }
@@ -132,21 +124,14 @@ export default function EmpresaDetalhe() {
         return { subtarefaId: s.id, ok: isSubtarefaOk(grupo.id, s.id), valor: valNum };
       });
 
-      // Valor do imposto do grupo
-      const valGrupoStr = valorGrupo[grupo.id] || '';
-      const valGrupoNum = parseFloat(valGrupoStr.replace(/[^\d,]/g, '').replace(',', '.')) || null;
-
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
         entregue: eg.entregue || false,
         dispensada: eg.dispensada || false,
         dataEntrega: datas[grupo.id] || eg.dataEntrega || null,
-        valorImposto: valGrupoNum,
         subtarefas: subtarefasPayload
       });
       await carregarDados();
-      // Limpa estados locais após salvar
       setDatas(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
-      setValorGrupo(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
       setSalvo(prev => ({ ...prev, [grupo.id]: true }));
       setTimeout(() => setSalvo(prev => ({ ...prev, [grupo.id]: false })), 2000);
     } catch {
@@ -177,11 +162,10 @@ export default function EmpresaDetalhe() {
     setSalvando(prev => ({ ...prev, [grupo.id]: true }));
     try {
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
-        entregue: false, dispensada: false, dataEntrega: null, valorImposto: null, subtarefas: []
+        entregue: false, dispensada: false, dataEntrega: null, subtarefas: []
       });
       await carregarDados();
       setDatas(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
-      setValorGrupo(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
     } catch {
       alert('Erro ao desfazer entrega.');
     } finally {
@@ -298,7 +282,6 @@ export default function EmpresaDetalhe() {
 
       <div className="grid grid-cols-[1fr_280px] gap-4">
         <div>
-          {/* Barra de ações */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
             {[
               ['pendentes', `Pendentes (${totalGrupos - concluidos})`],
@@ -317,7 +300,6 @@ export default function EmpresaDetalhe() {
             )}
           </div>
 
-          {/* Formulário novo grupo */}
           {mostraForm && isGestor && (
             <form onSubmit={criarGrupo} className="card p-5 mb-4">
               <p className="text-sm font-semibold text-ink mb-4">Novo grupo de tarefas</p>
@@ -326,14 +308,14 @@ export default function EmpresaDetalhe() {
                   <label className="label">Nome do grupo</label>
                   <input className="input" required value={novoGrupo.nome}
                     onChange={e => setNovoGrupo(p => ({ ...p, nome: e.target.value }))}
-                    placeholder="Ex: Impostos" />
+                    placeholder="Ex: Folha de Pagamento" />
                 </div>
                 <div>
                   <label className="label">Dia de vencimento</label>
                   <input className="input" type="number" min="1" max="31" required
                     value={novoGrupo.diaVencimento}
                     onChange={e => setNovoGrupo(p => ({ ...p, diaVencimento: e.target.value }))}
-                    placeholder="Ex: 12" />
+                    placeholder="Ex: 5" />
                 </div>
                 <div>
                   <label className="label">Tipo</label>
@@ -346,12 +328,15 @@ export default function EmpresaDetalhe() {
               </div>
 
               <div className="mb-4">
-                <label className="label mb-2">Subtarefas</label>
+                <label className="label mb-2">
+                  Subtarefas
+                  <span className="text-faint font-normal ml-1 text-xs">— marque "tem valor" para campos como INSS, FGTS, IR</span>
+                </label>
                 <div className="space-y-2 mb-3">
                   {novoGrupo.subtarefas.map(s => (
                     <div key={s.id} className="flex items-center gap-2 px-3 py-2 bg-surface2 rounded-lg border border-border">
                       <span className="text-sm flex-1">{s.nome}</span>
-                      {s.temValor && <span className="pill pill-blue text-[10px]">tem valor</span>}
+                      {s.temValor && <span className="pill pill-blue text-[10px]">💰 tem valor</span>}
                       <button type="button" onClick={() => removerSubtarefaForm(s.id)} className="text-xs text-red-400 hover:text-red-600">✕</button>
                     </div>
                   ))}
@@ -359,13 +344,13 @@ export default function EmpresaDetalhe() {
                 <div className="flex items-center gap-2">
                   <input className="input flex-1 h-8 text-xs" value={novaSubtarefa.nome}
                     onChange={e => setNovaSubtarefa(p => ({ ...p, nome: e.target.value }))}
-                    placeholder="Nome da subtarefa (ex: INSS)"
+                    placeholder="Nome da subtarefa (ex: INSS, FGTS, IR...)"
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarSubtarefaForm())} />
-                  <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0">
+                  <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0 px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
                     <input type="checkbox" checked={novaSubtarefa.temValor}
                       onChange={e => setNovaSubtarefa(p => ({ ...p, temValor: e.target.checked }))}
                       className="accent-ink" />
-                    tem valor
+                    💰 tem valor
                   </label>
                   <button type="button" onClick={adicionarSubtarefaForm} className="btn btn-secondary text-xs h-8 px-3 flex-shrink-0">+ Add</button>
                 </div>
@@ -423,7 +408,6 @@ export default function EmpresaDetalhe() {
               const today = new Date().getDate();
               const atrasado = !concluido && grupo.diaVencimento < today;
               const dataEntregaAtual = getDataEntrega(grupo.id);
-              const valorImpostoAtual = getValorGrupo(grupo.id);
 
               return (
                 <div key={grupo.id} className={`card overflow-hidden ${concluido ? 'opacity-80' : ''}`}>
@@ -494,11 +478,11 @@ export default function EmpresaDetalhe() {
                     </div>
                   )}
 
-                  {/* Campos de data e valor — visíveis quando marcado como entregue OU sempre editáveis */}
+                  {/* Campo de data de entrega — para todas as tarefas */}
                   {!dispensado && (
                     <div className="px-5 py-3 border-t border-border bg-surface2/50">
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 max-w-[220px]">
                           <label className="label mb-1">
                             Data de entrega
                             <span className="text-faint font-normal ml-1">(opcional)</span>
@@ -510,28 +494,12 @@ export default function EmpresaDetalhe() {
                             disabled={entregue && !isGestor}
                             onChange={e => setDatas(prev => ({ ...prev, [grupo.id]: e.target.value }))} />
                         </div>
-                        <div>
-                          <label className="label mb-1">
-                            Valor do imposto
-                            <span className="text-faint font-normal ml-1">(opcional)</span>
-                          </label>
-                          <input
-                            className="input text-xs h-8"
-                            placeholder="R$ 0,00"
-                            value={valorImpostoAtual}
-                            disabled={entregue && !isGestor}
-                            onChange={e => setValorGrupo(prev => ({ ...prev, [grupo.id]: e.target.value }))} />
-                        </div>
+                        {entregue && entregas[grupo.id]?.dataEntrega && (
+                          <p className="text-xs text-green-700 mt-4">
+                            ✓ Entregue em {new Date(entregas[grupo.id].dataEntrega).toLocaleDateString('pt-BR')}
+                          </p>
+                        )}
                       </div>
-                      {/* Mostra data e valor salvos quando entregue */}
-                      {entregue && entregas[grupo.id]?.dataEntrega && (
-                        <p className="text-xs text-green-700 mt-2">
-                          ✓ Entregue em {new Date(entregas[grupo.id].dataEntrega).toLocaleDateString('pt-BR')}
-                          {entregas[grupo.id]?.valorImposto && (
-                            <span className="ml-2">· {fmtMoeda(entregas[grupo.id].valorImposto)}</span>
-                          )}
-                        </p>
-                      )}
                     </div>
                   )}
 
