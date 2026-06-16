@@ -33,6 +33,21 @@ const formVazio = {
   escopo: 'todas', empresaId: '', empresasIds: [], subtarefas: [],
 };
 
+const Checkbox = ({ checked, onClick, indeterminate }) => (
+  <div
+    onClick={onClick}
+    className={`w-4 h-4 rounded border flex items-center justify-center cursor-pointer flex-shrink-0 transition-colors ${checked || indeterminate ? 'bg-ink border-ink' : 'border-border2 hover:border-muted'}`}>
+    {checked && (
+      <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+        <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
+      </svg>
+    )}
+    {indeterminate && !checked && (
+      <div className="w-2 h-0.5 bg-white rounded" />
+    )}
+  </div>
+);
+
 export default function Tarefas() {
   const [grupos, setGrupos] = useState([]);
   const [total, setTotal] = useState(0);
@@ -49,6 +64,8 @@ export default function Tarefas() {
   const [filtroBusca, setFiltroBusca] = useState('');
   const [filtroTipoEmpresa, setFiltroTipoEmpresa] = useState('todas');
   const [buscaEmpresaForm, setBuscaEmpresaForm] = useState('');
+  const [selecionadas, setSelecionadas] = useState([]);
+  const [excluindoLote, setExcluindoLote] = useState(false);
   const { isGestor } = useAuth();
 
   useEffect(() => {
@@ -61,6 +78,7 @@ export default function Tarefas() {
 
   function carregar(p = 1, busca = '') {
     setLoading(true);
+    setSelecionadas([]);
     const params = new URLSearchParams({ page: p, limit: LIMIT });
     if (busca) params.append('busca', busca);
     api.get(`/grupos?${params}`)
@@ -144,6 +162,30 @@ export default function Tarefas() {
     }
   }
 
+  function toggleSelecao(id) {
+    setSelecionadas(s => s.includes(id) ? s.filter(x => x !== id) : [...s, id]);
+  }
+
+  function toggleTodas() {
+    if (selecionadas.length === grupos.length) setSelecionadas([]);
+    else setSelecionadas(grupos.map(g => g.id));
+  }
+
+  async function excluirEmLote() {
+    const nomes = grupos.filter(g => selecionadas.includes(g.id)).map(g => `${g.nome} — ${g.empresa?.razaoSocial}`);
+    if (!window.confirm(`REMOVER ${selecionadas.length} tarefa(s)?\n\n${nomes.slice(0, 5).join('\n')}${nomes.length > 5 ? `\n...e mais ${nomes.length - 5}` : ''}\n\nEsta ação não pode ser desfeita.`)) return;
+    setExcluindoLote(true);
+    try {
+      await Promise.all(selecionadas.map(id => api.delete(`/grupos/${id}`)));
+      carregar(1, filtroBusca);
+      setPage(1);
+    } catch {
+      alert('Erro ao excluir tarefas.');
+    } finally {
+      setExcluindoLote(false);
+    }
+  }
+
   async function salvar(e) {
     e.preventDefault();
     let empresaIds;
@@ -207,6 +249,8 @@ export default function Tarefas() {
   const totalPages = Math.ceil(total / LIMIT);
   const todasFiltradasSelecionadas = empresasFiltradas.length > 0 &&
     empresasFiltradas.every(e => form.empresasIds.includes(e.id));
+  const todasSelecionadas = grupos.length > 0 && selecionadas.length === grupos.length;
+  const algumasSelecionadas = selecionadas.length > 0 && selecionadas.length < grupos.length;
 
   return (
     <div>
@@ -234,7 +278,6 @@ export default function Tarefas() {
                   placeholder="Ex: FGTS Digital, Folha de Pagamento..." />
               </div>
 
-              {/* Dia de vencimento + toggle dia útil */}
               <div className="col-span-2">
                 <label className="label">
                   {form.isDiaUtil ? 'Nº dia útil de vencimento' : 'Dia de vencimento'}
@@ -399,12 +442,16 @@ export default function Tarefas() {
             )}
 
             <div>
-              <label className="label mb-2">Subtarefas <span className="text-faint font-normal">(opcional)</span></label>
+              <label className="label mb-2">
+                Subtarefas
+                <span className="text-faint font-normal ml-1 text-xs">— marque "tem valor" para campos como INSS, FGTS, IR</span>
+              </label>
               {form.subtarefas.length > 0 && (
                 <div className="space-y-1 mb-2">
                   {form.subtarefas.map((s, i) => (
                     <div key={i} className="flex items-center gap-2 px-3 py-2 bg-surface2 rounded-lg border border-border">
                       <span className="text-sm flex-1">{s.nome}</span>
+                      {s.temValor && <span className="pill pill-blue text-[10px]">💰 tem valor</span>}
                       <button type="button" onClick={() => removerSub(i)} className="text-xs text-red-400 hover:text-red-600">✕</button>
                     </div>
                   ))}
@@ -414,8 +461,21 @@ export default function Tarefas() {
                 <input className="input flex-1" value={novaSub}
                   onChange={e => setNovaSub(e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); adicionarSub(); } }}
-                  placeholder="Nome da subtarefa..." />
-                <button type="button" onClick={adicionarSub} className="btn btn-secondary">+ Add</button>
+                  placeholder="Nome da subtarefa (ex: INSS, FGTS, Holerith...)" />
+                <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0 px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
+                  <input type="checkbox"
+                    checked={form._novaSubTemValor || false}
+                    onChange={e => setForm(f => ({ ...f, _novaSubTemValor: e.target.checked }))}
+                    className="accent-ink" />
+                  💰 tem valor
+                </label>
+                <button type="button"
+                  onClick={() => {
+                    if (!novaSub.trim()) return;
+                    setForm(f => ({ ...f, subtarefas: [...f.subtarefas, { nome: novaSub.trim(), temValor: f._novaSubTemValor || false }], _novaSubTemValor: false }));
+                    setNovaSub('');
+                  }}
+                  className="btn btn-secondary">+ Add</button>
               </div>
             </div>
           </div>
@@ -431,10 +491,22 @@ export default function Tarefas() {
         </form>
       )}
 
-      <div className="mb-4 flex items-center gap-3">
+      {/* Barra de busca e ações em lote */}
+      <div className="mb-4 flex items-center gap-3 flex-wrap">
         <input className="input max-w-xs" placeholder="Buscar por tarefa ou empresa..."
           value={buscaInput} onChange={e => setBuscaInput(e.target.value)} />
         <span className="text-xs text-faint">{total} tarefa(s)</span>
+
+        {isGestor && selecionadas.length > 0 && (
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 border border-red-200 rounded-lg ml-auto">
+            <span className="text-xs font-semibold text-red-700">{selecionadas.length} selecionada(s)</span>
+            <button onClick={excluirEmLote} disabled={excluindoLote}
+              className="text-xs font-semibold text-red-600 hover:text-red-800 border border-red-300 px-2 py-0.5 rounded hover:bg-red-100 transition-colors">
+              {excluindoLote ? 'Removendo...' : '🗑 Remover selecionadas'}
+            </button>
+            <button onClick={() => setSelecionadas([])} className="text-xs text-muted hover:text-ink">✕</button>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -450,6 +522,14 @@ export default function Tarefas() {
             <table className="w-full">
               <thead className="bg-surface2">
                 <tr>
+                  {isGestor && (
+                    <th className="px-4 py-2.5 border-b border-border w-8">
+                      <Checkbox
+                        checked={todasSelecionadas}
+                        indeterminate={algumasSelecionadas}
+                        onClick={toggleTodas} />
+                    </th>
+                  )}
                   {['Tarefa', 'Empresa', 'Vencimento', 'Tipo', 'Início cobrança', 'Subtarefas', ''].map(h => (
                     <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">{h}</th>
                   ))}
@@ -457,7 +537,15 @@ export default function Tarefas() {
               </thead>
               <tbody>
                 {grupos.map(g => (
-                  <tr key={g.id} className="border-b border-border last:border-b-0 hover:bg-surface2">
+                  <tr key={g.id}
+                    className={`border-b border-border last:border-b-0 hover:bg-surface2 transition-colors ${selecionadas.includes(g.id) ? 'bg-red-50' : ''}`}>
+                    {isGestor && (
+                      <td className="px-4 py-3 w-8">
+                        <Checkbox
+                          checked={selecionadas.includes(g.id)}
+                          onClick={() => toggleSelecao(g.id)} />
+                      </td>
+                    )}
                     <td className="px-4 py-3 text-sm font-semibold text-ink">{g.nome}</td>
                     <td className="px-4 py-3 text-sm text-muted max-w-[180px] truncate" title={g.empresa?.razaoSocial}>{g.empresa?.razaoSocial || '—'}</td>
                     <td className="px-4 py-3">
