@@ -5,6 +5,8 @@ import { useAuth } from '../contexts/AuthContext';
 const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : '—';
 const hoje = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 
+const DIAS_ATE_EXCLUIR = 30;
+
 export default function Agenda() {
   const { usuario, isGestor } = useAuth();
   const [eventos, setEventos] = useState([]);
@@ -16,6 +18,7 @@ export default function Agenda() {
   const [usuarios, setUsuarios] = useState([]);
   const [empresas, setEmpresas] = useState([]);
   const [salvando, setSalvando] = useState(false);
+  const [busca, setBusca] = useState('');
   const [form, setForm] = useState({
     titulo: '', descricao: '', dataInicio: '', dataLimite: '', empresaId: ''
   });
@@ -28,9 +31,7 @@ export default function Agenda() {
     }
   }, []);
 
-  useEffect(() => {
-    carregarEventos();
-  }, [usuarioFiltro, filtro]);
+  useEffect(() => { carregarEventos(); }, [usuarioFiltro, filtro]);
 
   async function carregarEventos() {
     setLoading(true);
@@ -111,8 +112,31 @@ export default function Agenda() {
     return 'ativo';
   }
 
+  // Quantos dias desde que foi concluído
+  function diasDesdeConclusao(ev) {
+    if (!ev.concluido || !ev.dataConclusao) return 0;
+    const conclusao = new Date(ev.dataConclusao); conclusao.setHours(0,0,0,0);
+    return Math.floor((hoje() - conclusao) / 86400000);
+  }
+
+  // Filtra por busca
+  const eventosFiltrados = eventos.filter(ev => {
+    if (!busca) return true;
+    const q = busca.toLowerCase();
+    return (
+      ev.titulo.toLowerCase().includes(q) ||
+      ev.empresa?.razaoSocial?.toLowerCase().includes(q) ||
+      ev.descricao?.toLowerCase().includes(q)
+    );
+  });
+
   const pendentes = eventos.filter(e => !e.concluido);
   const atrasados = pendentes.filter(e => statusEvento(e) === 'atrasado');
+
+  // Eventos concluídos há mais de 30 dias — serão removidos em breve
+  const proximosExcluir = eventos.filter(ev =>
+    ev.concluido && diasDesdeConclusao(ev) >= 20 && diasDesdeConclusao(ev) < DIAS_ATE_EXCLUIR
+  );
 
   return (
     <div>
@@ -124,6 +148,24 @@ export default function Agenda() {
         <button onClick={() => abrirForm()} className="btn btn-primary">+ Novo evento</button>
       </div>
 
+      {/* Aviso de exclusão automática */}
+      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">
+        <div className="flex items-start gap-2">
+          <span className="text-amber-500 mt-0.5">⏳</span>
+          <div>
+            <p className="text-sm font-semibold text-amber-800">Exclusão automática de eventos concluídos</p>
+            <p className="text-xs text-amber-700 mt-0.5">
+              Eventos concluídos são removidos automaticamente após <strong>{DIAS_ATE_EXCLUIR} dias</strong> da data de conclusão.
+              {proximosExcluir.length > 0 && (
+                <span className="ml-1 font-semibold text-amber-900">
+                  {proximosExcluir.length} evento{proximosExcluir.length !== 1 ? 's' : ''} será{proximosExcluir.length !== 1 ? 'ão' : ''} removido{proximosExcluir.length !== 1 ? 's' : ''} em breve.
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Formulário */}
       {mostraForm && (
         <form onSubmit={salvar} className="card p-5 mb-5 max-w-2xl">
@@ -133,7 +175,7 @@ export default function Agenda() {
               <label className="label">Título</label>
               <input className="input" required value={form.titulo}
                 onChange={e => setForm(f => ({ ...f, titulo: e.target.value }))}
-                placeholder="Ex: Rescisão Fulano — Empresa Siclano" />
+                placeholder="Ex: Rescisão Fulano — Empresa Siclano" autoFocus />
             </div>
             <div>
               <label className="label">Data de início</label>
@@ -173,14 +215,22 @@ export default function Agenda() {
         </form>
       )}
 
-      {/* Filtros */}
+      {/* Filtros + Busca */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
-        {['pendentes', 'todos', 'concluidos'].map(f => (
-          <button key={f} onClick={() => setFiltro(f)}
-            className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all capitalize ${filtro === f ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
-            {f === 'pendentes' ? `Pendentes (${pendentes.length})` : f === 'concluidos' ? 'Concluídos' : 'Todos'}
-          </button>
-        ))}
+        <input
+          className="input max-w-xs"
+          placeholder="Buscar por título, empresa..."
+          value={busca}
+          onChange={e => setBusca(e.target.value)} />
+
+        <div className="flex gap-1.5">
+          {['pendentes', 'todos', 'concluidos'].map(f => (
+            <button key={f} onClick={() => setFiltro(f)}
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtro === f ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
+              {f === 'pendentes' ? `Pendentes (${pendentes.length})` : f === 'concluidos' ? 'Concluídos' : 'Todos'}
+            </button>
+          ))}
+        </div>
 
         {isGestor && (
           <select className="select h-8 text-xs ml-auto max-w-[200px]"
@@ -191,6 +241,10 @@ export default function Agenda() {
               <option key={u.id} value={u.id}>{u.nome}</option>
             ))}
           </select>
+        )}
+
+        {busca && (
+          <span className="text-xs text-faint">{eventosFiltrados.length} resultado(s)</span>
         )}
       </div>
 
@@ -204,36 +258,39 @@ export default function Agenda() {
         </div>
       )}
 
-      {/* Lista de eventos */}
+      {/* Lista */}
       {loading ? (
         <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>
-      ) : eventos.length === 0 ? (
+      ) : eventosFiltrados.length === 0 ? (
         <div className="card p-10 text-center">
           <p className="text-sm text-faint">
-            {filtro === 'concluidos' ? 'Nenhum evento concluído.' : 'Nenhum evento pendente.'}
+            {busca ? 'Nenhum evento encontrado para essa busca.' : filtro === 'concluidos' ? 'Nenhum evento concluído.' : 'Nenhum evento pendente.'}
           </p>
-          {filtro === 'pendentes' && !usuarioFiltro && (
+          {filtro === 'pendentes' && !usuarioFiltro && !busca && (
             <button onClick={() => abrirForm()} className="btn btn-primary mt-3 mx-auto">+ Criar primeiro evento</button>
           )}
         </div>
       ) : (
         <div className="space-y-3">
-          {eventos.map(ev => {
+          {eventosFiltrados.map(ev => {
             const status = statusEvento(ev);
             const podeEditar = ev.usuarioId === usuario?.id;
+            const diasConc = diasDesdeConclusao(ev);
+            const diasRestantes = DIAS_ATE_EXCLUIR - diasConc;
+            const proxExcluir = ev.concluido && diasConc >= 20;
 
             return (
-              <div key={ev.id} className={`card overflow-hidden ${ev.concluido ? 'opacity-60' : ''}`}>
+              <div key={ev.id} className={`card overflow-hidden ${ev.concluido ? 'opacity-70' : ''}`}>
                 <div className={`px-5 py-4 flex items-start justify-between gap-4 ${
-                  status === 'atrasado' ? 'bg-red-50' :
+                  status === 'atrasado'  ? 'bg-red-50' :
                   status === 'concluido' ? 'bg-green-50' :
-                  status === 'futuro' ? 'bg-blue-50' : 'bg-surface'
+                  status === 'futuro'    ? 'bg-blue-50' : 'bg-surface'
                 }`}>
                   <div className="flex items-start gap-3 flex-1 min-w-0">
                     <div className={`w-2.5 h-2.5 rounded-full mt-1.5 flex-shrink-0 ${
-                      status === 'atrasado' ? 'bg-red-500' :
+                      status === 'atrasado'  ? 'bg-red-500' :
                       status === 'concluido' ? 'bg-green-500' :
-                      status === 'futuro' ? 'bg-blue-400' : 'bg-amber-400'
+                      status === 'futuro'    ? 'bg-blue-400' : 'bg-amber-400'
                     }`} />
                     <div className="flex-1 min-w-0">
                       <p className={`text-sm font-semibold ${ev.concluido ? 'line-through text-faint' : 'text-ink'}`}>
@@ -264,6 +321,14 @@ export default function Agenda() {
                           <span className="text-xs text-faint">· {ev.usuario.nome}</span>
                         )}
                       </div>
+
+                      {/* Aviso de exclusão próxima */}
+                      {proxExcluir && (
+                        <div className="mt-2 flex items-center gap-1.5 text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 w-fit">
+                          <span>⏳</span>
+                          <span>Será removido em <strong>{diasRestantes} dia{diasRestantes !== 1 ? 's' : ''}</strong></span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
