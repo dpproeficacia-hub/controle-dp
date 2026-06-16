@@ -6,7 +6,6 @@ import api from '../lib/api';
 
 const MESES = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
 
-// SVG da Códex inline — não depende de arquivo externo
 const CodexLogo = () => (
   <svg width="16" height="16" viewBox="0 0 120 120" xmlns="http://www.w3.org/2000/svg">
     <path d="M50 32 L31 60 L50 88" fill="none" stroke="white" strokeWidth="7" strokeLinecap="round" strokeLinejoin="round"/>
@@ -25,25 +24,17 @@ export default function Layout() {
   const [responsaveis, setResponsaveis] = useState([]);
 
   useEffect(() => {
-    // Carrega do localStorage primeiro (instantâneo)
     const s = localStorage.getItem('dp_identidade');
-    if (s) {
-      try { setCfg(JSON.parse(s)); } catch {}
-    }
-    // Depois busca do banco (garante consistência entre dispositivos)
+    if (s) { try { setCfg(JSON.parse(s)); } catch {} }
     api.get('/escritorio/config').then(({ data }) => {
       const novo = {
         corPrimaria: data.corPrimaria || '#1C1B19',
         logo: data.logo || '',
         nomeEscritorio: data.nome || 'DPSmart',
-        whatsapp: data.whatsapp || '',
-        email: data.emailContato || '',
       };
       setCfg(novo);
       localStorage.setItem('dp_identidade', JSON.stringify(novo));
     }).catch(() => {});
-
-    // Escuta mudanças do Identidade.jsx
     const handler = () => {
       const s = localStorage.getItem('dp_identidade');
       if (s) { try { setCfg(JSON.parse(s)); } catch {} }
@@ -53,12 +44,10 @@ export default function Layout() {
   }, []);
 
   useEffect(() => {
-    if (isGestor) {
-      api.get('/responsaveis').then(r => setResponsaveis(r.data)).catch(() => {});
-    }
+    if (isGestor) api.get('/responsaveis').then(r => setResponsaveis(r.data)).catch(() => {});
   }, [isGestor]);
 
-  const competencia = `${ano}-${String(mes + 1).padStart(2, '0')}`;
+  const competencia = `${ano}-${String(mes + 1).padStart(2, '00')}`;
 
   function mudarMes(d) {
     let nm = mes + d, na = ano;
@@ -74,8 +63,6 @@ export default function Layout() {
     <div className="flex h-screen overflow-hidden bg-bg">
       <aside className="w-[220px] min-w-[220px] flex flex-col border-r border-white/10"
         style={{ background: cfg.corPrimaria }}>
-
-        {/* Cabeçalho do escritório */}
         <div className="px-4 py-5 border-b border-white/10">
           <div className="flex items-center gap-2.5">
             {cfg.logo ? (
@@ -99,7 +86,6 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Navegação */}
         <nav className="flex-1 px-2 py-2 overflow-y-auto">
           <p className="px-2 py-2 text-[10px] font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Principal</p>
           <NI to="/dashboard">Dashboard</NI>
@@ -123,7 +109,6 @@ export default function Layout() {
           )}
         </nav>
 
-        {/* Usuário logado */}
         <div className="px-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
           <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-colors"
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
@@ -141,7 +126,7 @@ export default function Layout() {
           </div>
         </div>
 
-        {/* Rodapé Códex — fixo, sempre visível */}
+        {/* Rodapé Códex */}
         <div className="px-4 py-3 flex items-center gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <CodexLogo />
           <div className="min-w-0">
@@ -151,7 +136,6 @@ export default function Layout() {
         </div>
       </aside>
 
-      {/* Conteúdo principal */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="bg-surface border-b border-border h-14 flex items-center px-6 gap-3 flex-shrink-0">
           <div className="flex-1" />
@@ -170,9 +154,13 @@ export default function Layout() {
               <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-faint text-[10px]">▼</div>
             </div>
           )}
+          {/* Navegação de competência */}
           <div className="flex items-center gap-2">
             <button onClick={() => mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
-            <span className="text-sm font-semibold text-ink min-w-[110px] text-center">{MESES[mes]} / {ano}</span>
+            <div className="text-center min-w-[160px]">
+              <p className="text-[9px] font-semibold uppercase tracking-widest text-faint">Competência</p>
+              <p className="text-sm font-semibold text-ink">{MESES[mes]} / {ano}</p>
+            </div>
             <button onClick={() => mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
           </div>
           <SinoNotificacoes />
