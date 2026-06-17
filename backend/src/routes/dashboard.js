@@ -12,7 +12,6 @@ router.get('/:competencia', async (req, res) => {
     const { responsavelId } = req.query;
     const anoAtual = new Date().getFullYear();
 
-    // CORRIGIDO: sempre filtra pelo escritório do usuário logado
     const whereBase = { ativa: true, saiuDoEscritorio: false, escritorioId: req.user.escritorioId };
     if (req.user.nivel === 'OPERADOR') {
       whereBase.responsavelId = req.user.id;
@@ -20,22 +19,21 @@ router.get('/:competencia', async (req, res) => {
       whereBase.responsavelId = responsavelId;
     }
 
-    const [empresas, historicos, sindicais, responsaveis] = await Promise.all([
+    const [empresasTodas, historicos, sindicais, responsaveis] = await Promise.all([
       prisma.empresa.findMany({
         where: whereBase,
         select: {
           id: true, nivel: true, temFuncionarios: true,
-          temProLabore: true, semMovimento: true, responsavelId: true
+          temProLabore: true, semMovimento: true, responsavelId: true,
+          competenciaInicial: true
         }
       }),
-      // Filtra históricos apenas das empresas do escritório
       prisma.historicoMensal.findMany({
         where: {
           competencia,
           empresa: { escritorioId: req.user.escritorioId }
         }
       }),
-      // Filtra sindicatos do escritório
       prisma.controleSindical.findMany({
         where: { empresa: { escritorioId: req.user.escritorioId } }
       }),
@@ -44,6 +42,13 @@ router.get('/:competencia', async (req, res) => {
         select: { id: true, nome: true }
       })
     ]);
+
+    // Filtra empresas que já alcançaram sua competenciaInicial nesta competência
+    // (mesma regra usada no Controle Mensal — empresa só "existe" a partir do mês configurado)
+    const empresas = empresasTodas.filter(emp => {
+      if (!emp.competenciaInicial) return true; // sem restrição, sempre conta
+      return competencia >= emp.competenciaInicial; // comparação lexicográfica "YYYY-MM" funciona
+    });
 
     const historicoMap = Object.fromEntries(historicos.map(h => [h.empresaId, h]));
 
@@ -76,7 +81,7 @@ router.get('/:competencia', async (req, res) => {
       ...(stats.porResponsavel[r.id] || { total: 0, finalizados: 0 })
     })).filter(r => r.total > 0);
 
-    // Evolução dos últimos 6 meses para o gráfico
+    // Evolução dos últimos 6 meses para o gráfico — também respeita competenciaInicial por mês
     const ultimosMeses = [];
     const [anoComp, mesComp] = competencia.split('-').map(Number);
     for (let i = 5; i >= 0; i--) {
@@ -88,13 +93,19 @@ router.get('/:competencia', async (req, res) => {
 
     const evolucao = await Promise.all(
       ultimosMeses.map(async (comp) => {
+        const empresasDoMes = empresasTodas.filter(emp => {
+          if (!emp.competenciaInicial) return true;
+          return comp >= emp.competenciaInicial;
+        });
         const hists = await prisma.historicoMensal.findMany({
           where: { competencia: comp, empresa: { escritorioId: req.user.escritorioId, ...whereBase } },
-          select: { status: true }
+          select: { status: true, empresaId: true }
         });
-        const total = empresas.length;
-        const finalizados = hists.filter(h => h.status === 'FINALIZADO').length;
-        const parciais = hists.filter(h => h.status === 'PARCIAL').length;
+        const idsDoMes = new Set(empresasDoMes.map(e => e.id));
+        const histsFiltrados = hists.filter(h => idsDoMes.has(h.empresaId));
+        const total = empresasDoMes.length;
+        const finalizados = histsFiltrados.filter(h => h.status === 'FINALIZADO').length;
+        const parciais = histsFiltrados.filter(h => h.status === 'PARCIAL').length;
         return { competencia: comp, total, finalizados, parciais, pendentes: total - finalizados - parciais };
       })
     );
