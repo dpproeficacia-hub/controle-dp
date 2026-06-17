@@ -67,7 +67,7 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const {
       razaoSocial, cnpj, tipoDocumento, enquadramento, tipo, nivel, prazoEntrega,
-      cidade, estado,
+      cidade, estado, competenciaInicial,
       temFuncionarios, temProLabore, semMovimento, temFilial, fatorR, enviaReinf,
       observacoes, responsavelId, matrizId, filiaisIds, participaTarefas
     } = req.body;
@@ -81,6 +81,7 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
         enquadramento, tipo, nivel: nivel || 'N3', prazoEntrega: prazo,
         cidade: cidade?.trim() || null,
         estado: estado?.trim()?.toUpperCase() || null,
+        competenciaInicial: competenciaInicial || null,
         temFuncionarios: temFuncionarios || false,
         temProLabore: temProLabore || false,
         semMovimento: semMovimento || false,
@@ -120,6 +121,7 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
     if (dados.matrizId === '') dados.matrizId = null;
     if (dados.cidade !== undefined) dados.cidade = dados.cidade?.trim() || null;
     if (dados.estado !== undefined) dados.estado = dados.estado?.trim()?.toUpperCase() || null;
+    if (dados.competenciaInicial === '') dados.competenciaInicial = null;
     delete dados.escritorioId;
     const empresa = await prisma.empresa.update({
       where: { id: req.params.id },
@@ -158,7 +160,7 @@ router.post('/editar-lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) =>
     const camposPermitidos = [
       'temFuncionarios', 'temProLabore', 'semMovimento', 'enviaReinf',
       'fatorR', 'participaTarefas', 'nivel', 'tipo', 'enquadramento',
-      'responsavelId', 'prazoEntrega', 'cidade', 'estado'
+      'responsavelId', 'prazoEntrega', 'cidade', 'estado', 'competenciaInicial'
     ];
     const dadosLimpos = {};
     for (const [k, v] of Object.entries(campos)) {
