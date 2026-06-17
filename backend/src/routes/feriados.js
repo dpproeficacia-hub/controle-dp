@@ -1,6 +1,6 @@
 const express = require('express');
 const { PrismaClient } = require('@prisma/client');
-const { authMiddleware, requireNivel } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 const router = express.Router();
 const prisma = new PrismaClient();
@@ -18,7 +18,7 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Todos podem criar feriados
+// Todos podem criar
 router.post('/', async (req, res) => {
   try {
     const { nome, dia, mes, cidade, estado } = req.body;
@@ -57,8 +57,8 @@ router.put('/:id', async (req, res) => {
   }
 });
 
-// Só GESTOR/ADMIN podem excluir
-router.delete('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos podem excluir
+router.delete('/:id', async (req, res) => {
   try {
     await prisma.feriado.delete({ where: { id: req.params.id } });
     res.json({ ok: true });
