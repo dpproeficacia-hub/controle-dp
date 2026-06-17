@@ -71,13 +71,11 @@ function calcularNesimoDiaUtil(ano, mes, nDiaUtil, feriadosMunicipais = [], cida
 }
 
 /**
- * Calcula a data real de vencimento de um grupo de tarefa
- * @param {object} grupo - { diaVencimento, isDiaUtil, mesSubsequente }
- * @param {string} competencia - "2026-06"
- * @param {Array} feriadosMunicipais
- * @param {string|null} cidade
- * @param {string|null} estado
- * @returns {Date}
+ * Calcula a data real de vencimento de um grupo de tarefa.
+ * IMPORTANTE: a data é criada fixando meio-dia UTC (12h) para blindar
+ * contra deslocamento de fuso horário ao serializar/desserializar entre
+ * servidor (UTC no Render) e cliente (America/Sao_Paulo, UTC-3).
+ * Meia-noite UTC desloca para o dia anterior em -3h; meio-dia UTC nunca desloca.
  */
 function calcularDataVencimento(grupo, competencia, feriadosMunicipais = [], cidade = null, estado = null) {
   const [anoComp, mesComp] = competencia.split('-').map(Number);
@@ -96,7 +94,8 @@ function calcularDataVencimento(grupo, competencia, feriadosMunicipais = [], cid
     diaVenc = calcularNesimoDiaUtil(anoVenc, mesVenc, grupo.diaVencimento, feriadosMunicipais, cidade, estado);
   }
 
-  return new Date(anoVenc, mesVenc - 1, diaVenc);
+  // Usa Date.UTC com hora 12 (meio-dia) para fixar o dia calendário sem ambiguidade de fuso
+  return new Date(Date.UTC(anoVenc, mesVenc - 1, diaVenc, 12, 0, 0));
 }
 
 module.exports = { calcularNesimoDiaUtil, isDiaUtil, isFeriadoNacional, calcularDataVencimento };
