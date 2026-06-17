@@ -88,6 +88,31 @@ router.get('/me', authMiddleware, async (req, res) => {
   }
 });
 
+// Usuário logado troca a própria senha (precisa informar a senha atual)
+router.put('/alterar-senha', authMiddleware, async (req, res) => {
+  try {
+    const { senhaAtual, novaSenha } = req.body;
+    if (!senhaAtual || !novaSenha) {
+      return res.status(400).json({ error: 'Informe a senha atual e a nova senha.' });
+    }
+    if (novaSenha.length < 6) {
+      return res.status(400).json({ error: 'A nova senha deve ter no mínimo 6 caracteres.' });
+    }
+    const usuario = await prisma.usuario.findUnique({ where: { id: req.user.id } });
+    if (!usuario) return res.status(404).json({ error: 'Usuário não encontrado.' });
+
+    const senhaOk = await bcrypt.compare(senhaAtual, usuario.senha);
+    if (!senhaOk) return res.status(401).json({ error: 'Senha atual incorreta.' });
+
+    const novoHash = await bcrypt.hash(novaSenha, 10);
+    await prisma.usuario.update({ where: { id: req.user.id }, data: { senha: novoHash } });
+
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Solicitar código de recuperação
 router.post('/recuperar', async (req, res) => {
   try {
