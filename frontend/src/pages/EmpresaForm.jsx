@@ -56,7 +56,7 @@ export default function EmpresaForm() {
     razaoSocial: '', cnpj: '', tipoDocumento: 'CNPJ',
     enquadramento: 'SIMPLES_NACIONAL', anexoSimples: 'ANEXO_III',
     tipo: 'COMERCIO', nivel: 'N3', prazoEntrega: '', responsavelId: '',
-    cidade: '', estado: '',
+    cidade: '', estado: '', competenciaInicial: '',
     temFuncionarios: false, temProLabore: false, semMovimento: false,
     temFilial: false, fatorR: false, enviaReinf: false,
     participaTarefas: false, observacoes: ''
@@ -96,6 +96,7 @@ export default function EmpresaForm() {
         responsavelId: d.responsavelId || '',
         cidade: d.cidade || '',
         estado: d.estado || '',
+        competenciaInicial: d.competenciaInicial || '',
         temFuncionarios: d.temFuncionarios,
         temProLabore: d.temProLabore,
         semMovimento: d.semMovimento,
@@ -327,6 +328,19 @@ export default function EmpresaForm() {
                 <option value="">Selecionar UF...</option>
                 {UFS.map(uf => <option key={uf} value={uf}>{uf}</option>)}
               </select>
+            </div>
+
+            {/* COMPETÊNCIA INICIAL — a partir de quando esta empresa entra nas tarefas */}
+            <div className="col-span-2">
+              <label className="label">
+                Competência inicial
+                <span className="text-faint font-normal ml-1">(opcional)</span>
+              </label>
+              <input className="input" type="month" value={form.competenciaInicial}
+                onChange={e => set('competenciaInicial', e.target.value)} />
+              <p className="text-xs text-faint mt-1">
+                A partir de qual mês esta empresa entra no controle de tarefas. Deixe em branco para cobrar desde o início de cada tarefa.
+              </p>
             </div>
           </div>
         </div>
