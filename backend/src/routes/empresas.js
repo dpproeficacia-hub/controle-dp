@@ -63,7 +63,8 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos os níveis podem criar empresas
+router.post('/', async (req, res) => {
   try {
     const {
       razaoSocial, cnpj, tipoDocumento, enquadramento, tipo, nivel, prazoEntrega,
@@ -112,7 +113,8 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos os níveis podem editar empresas
+router.put('/:id', async (req, res) => {
   try {
     const { sindical, filiais, filiaisIds, ...dados } = req.body;
     if (dados.cnpj) dados.cnpj = dados.cnpj.replace(/\D/g, '');
@@ -151,7 +153,8 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-router.post('/editar-lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
+// Todos os níveis podem editar em lote
+router.post('/editar-lote', async (req, res) => {
   try {
     const { ids, campos } = req.body;
     if (!Array.isArray(ids) || ids.length === 0) {
