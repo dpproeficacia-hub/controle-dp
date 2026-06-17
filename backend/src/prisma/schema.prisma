@@ -273,6 +273,7 @@ model GrupoTarefa {
   criadoEm         DateTime       @default(now())
   subtarefas       Subtarefa[]
   entregas         EntregaGrupo[]
+  eventoAgenda     EventoAgenda?
 }
 
 model Subtarefa {
@@ -317,17 +318,19 @@ model EntregaSubtarefa {
 }
 
 model EventoAgenda {
-  id            String    @id @default(cuid())
+  id            String       @id @default(cuid())
   titulo        String
   descricao     String?
   dataInicio    DateTime
   dataLimite    DateTime?
-  concluido     Boolean   @default(false)
+  concluido     Boolean      @default(false)
   dataConclusao DateTime?
   usuarioId     String
-  usuario       Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario       Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
   empresaId     String?
-  empresa       Empresa?  @relation(fields: [empresaId], references: [id], onDelete: SetNull)
-  criadoEm      DateTime  @default(now())
-  atualizadoEm  DateTime  @updatedAt
+  empresa       Empresa?     @relation(fields: [empresaId], references: [id], onDelete: SetNull)
+  grupoTarefaId String?      @unique
+  grupoTarefa   GrupoTarefa? @relation(fields: [grupoTarefaId], references: [id], onDelete: SetNull)
+  criadoEm      DateTime     @default(now())
+  atualizadoEm  DateTime     @updatedAt
 }
