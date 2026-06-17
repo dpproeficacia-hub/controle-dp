@@ -15,10 +15,9 @@ router.get('/:competencia', async (req, res) => {
     const whereEmpresa = {
       ativa: true,
       saiuDoEscritorio: false,
-      escritorioId: req.user.escritorioId,
-      participaTarefas: true
+      participaTarefas: true,
+      escritorioId: req.user.escritorioId
     };
-
     if (req.user.nivel === 'OPERADOR') whereEmpresa.responsavelId = req.user.id;
     else if (responsavelId) whereEmpresa.responsavelId = responsavelId;
 
@@ -27,13 +26,16 @@ router.get('/:competencia', async (req, res) => {
       select: {
         id: true, razaoSocial: true, cnpj: true, tipoDocumento: true,
         enquadramento: true, anexoSimples: true, tipo: true, nivel: true,
-        prazoEntrega: true, temFuncionarios: true, temProLabore: true,
+        prazoEntrega: true, cidade: true, estado: true,
+        temFuncionarios: true, temProLabore: true,
         semMovimento: true, fatorR: true, enviaReinf: true, participaTarefas: true,
-        cidade: true, estado: true,
         responsavel: { select: { id: true, nome: true } },
         gruposTarefa: {
           where: { ativo: true },
-          select: { id: true, diaVencimento: true, isDiaUtil: true, mesSubsequente: true }
+          select: {
+            id: true, nome: true, diaVencimento: true,
+            isDiaUtil: true, mesSubsequente: true, tipo: true
+          }
         },
         historicos: {
           where: { competencia },
@@ -46,87 +48,97 @@ router.get('/:competencia', async (req, res) => {
       orderBy: [{ razaoSocial: 'asc' }]
     });
 
-    const hoje = new Date();
-    const diaHoje = hoje.getDate();
-    const mesHoje = hoje.getMonth() + 1;
-    const anoHoje = hoje.getFullYear();
-
     // Feriados do escritório para cálculo de dias úteis
     const feriadosMunicipais = await prisma.feriado.findMany({
       where: { escritorioId: req.user.escritorioId }
     });
 
+    const { calcularDataVencimento } = require('../utils/diasUteis');
+    const hoje = new Date(); hoje.setHours(0, 0, 0, 0);
     const [anoComp, mesComp] = competencia.split('-').map(Number);
 
-    const resultado = empresas.map(emp => {
+    // Gera UMA linha por empresa por tarefa
+    const linhas = [];
+
+    for (const emp of empresas) {
+      if (emp.gruposTarefa.length === 0) continue;
+
       const historico = emp.historicos[0] || null;
-      const totalGrupos = emp.gruposTarefa.length;
       const entregasGrupo = historico?.entregasGrupo || [];
-      const concluidos = entregasGrupo.filter(eg => eg.entregue || eg.dispensada).length;
+      const entregaMap = Object.fromEntries(entregasGrupo.map(e => [e.grupoId, e]));
 
-      const gruposConcluidosIds = new Set(
-        entregasGrupo.filter(eg => eg.entregue || eg.dispensada).map(eg => eg.grupoId)
-      );
-      const gruposPendentes = emp.gruposTarefa.filter(g => !gruposConcluidosIds.has(g.id));
+      for (const grupo of emp.gruposTarefa) {
+        const entrega = entregaMap[grupo.id];
+        const entregue = entrega?.entregue || false;
+        const dispensada = entrega?.dispensada || false;
+        const concluido = entregue || dispensada;
 
-      // Calcula o prazo real de cada grupo considerando mesSubsequente
-      const prazosReais = gruposPendentes.map(g => {
-        let anoVenc = anoComp;
-        let mesVenc = mesComp;
+        // Calcula data real de vencimento
+        const dataVencReal = calcularDataVencimento(
+          grupo, competencia, feriadosMunicipais, emp.cidade, emp.estado
+        );
 
-        if (g.mesSubsequente) {
-          // Prazo no mês seguinte à competência
-          mesVenc = mesComp + 1;
-          if (mesVenc > 12) { mesVenc = 1; anoVenc++; }
+        const diasRestantes = Math.floor((dataVencReal - hoje) / 86400000);
+
+        let bolinha = null;
+        if (!concluido) {
+          if (diasRestantes < 0) bolinha = 'vermelho';
+          else if (diasRestantes <= 3) bolinha = 'laranja';
+          else bolinha = 'azul';
         }
 
-        // Converte para dia absoluto para comparar com hoje
-        const dataVenc = new Date(anoVenc, mesVenc - 1, g.diaVencimento);
-        const diasRestantesReais = Math.floor((dataVenc - new Date(anoHoje, mesHoje - 1, diaHoje)) / 86400000);
-        return { ...g, diasRestantesReais, dataVenc };
-      });
-
-      // Bolinha baseada no prazo real
-      const diaVencimentoMinimo = prazosReais.length > 0
-        ? Math.min(...prazosReais.map(g => g.diasRestantesReais))
-        : null;
-
-      let bolinha = null;
-      if (diaVencimentoMinimo !== null && concluidos < totalGrupos) {
-        if (diaVencimentoMinimo < 0) bolinha = 'vermelho';
-        else if (diaVencimentoMinimo <= 3) bolinha = 'laranja';
-        else bolinha = 'azul';
+        linhas.push({
+          // Identificadores
+          id: `${emp.id}_${grupo.id}`,
+          empresaId: emp.id,
+          grupoId: grupo.id,
+          // Dados da empresa
+          razaoSocial: emp.razaoSocial,
+          cnpj: emp.cnpj,
+          tipoDocumento: emp.tipoDocumento,
+          enquadramento: emp.enquadramento,
+          anexoSimples: emp.anexoSimples,
+          tipo: emp.tipo,
+          nivel: emp.nivel,
+          temFuncionarios: emp.temFuncionarios,
+          temProLabore: emp.temProLabore,
+          semMovimento: emp.semMovimento,
+          fatorR: emp.fatorR,
+          enviaReinf: emp.enviaReinf,
+          responsavel: emp.responsavel,
+          // Dados da tarefa
+          nomeTarefa: grupo.nome,
+          diaVencimento: grupo.diaVencimento,
+          isDiaUtil: grupo.isDiaUtil,
+          mesSubsequente: grupo.mesSubsequente,
+          tipoTarefa: grupo.tipo,
+          dataVencReal: dataVencReal.toISOString(),
+          diasRestantes,
+          // Status desta tarefa específica
+          entregue,
+          dispensada,
+          concluido,
+          _bolinha: bolinha,
+        });
       }
+    }
 
-      let statusCalc = 'NAO_INICIADO';
-      if (totalGrupos > 0 && concluidos >= totalGrupos) statusCalc = 'FINALIZADO';
-      else if (concluidos > 0) statusCalc = 'PARCIAL';
-
-      return {
-        id: emp.id, razaoSocial: emp.razaoSocial, cnpj: emp.cnpj,
-        tipoDocumento: emp.tipoDocumento, enquadramento: emp.enquadramento,
-        anexoSimples: emp.anexoSimples, tipo: emp.tipo, nivel: emp.nivel,
-        prazoEntrega: emp.prazoEntrega, temFuncionarios: emp.temFuncionarios,
-        temProLabore: emp.temProLabore, semMovimento: emp.semMovimento,
-        fatorR: emp.fatorR, enviaReinf: emp.enviaReinf, participaTarefas: emp.participaTarefas,
-        responsavel: emp.responsavel,
-        historico: { id: historico?.id || null, competencia, status: statusCalc, entregasGrupo: [] },
-        _totalGrupos: totalGrupos,
-        _entregues: concluidos,
-        _bolinha: bolinha,
-        _diaVencimentoMinimo: diaVencimentoMinimo,
-      };
-    });
-
-    resultado.sort((a, b) => {
-      if (a.prazoEntrega === null && b.prazoEntrega === null) return a.razaoSocial.localeCompare(b.razaoSocial, 'pt-BR');
-      if (a.prazoEntrega === null) return 1;
-      if (b.prazoEntrega === null) return -1;
-      if (a.prazoEntrega !== b.prazoEntrega) return a.prazoEntrega - b.prazoEntrega;
+    // Ordena por data de vencimento real (cronológico), depois alfabético
+    linhas.sort((a, b) => {
+      const diff = new Date(a.dataVencReal) - new Date(b.dataVencReal);
+      if (diff !== 0) return diff;
       return a.razaoSocial.localeCompare(b.razaoSocial, 'pt-BR');
     });
 
-    const filtrado = status ? resultado.filter(e => e.historico.status === status) : resultado;
+    // Aplica filtro de status se solicitado
+    const filtrado = status === 'FINALIZADO'
+      ? linhas.filter(l => l.concluido)
+      : status === 'NAO_INICIADO'
+      ? linhas.filter(l => !l.concluido && !l.entregue)
+      : status === 'PARCIAL'
+      ? linhas.filter(l => !l.concluido)
+      : linhas;
+
     res.json(filtrado);
   } catch (e) {
     console.error('GET /:competencia erro:', e);
@@ -156,11 +168,6 @@ router.get('/:competencia/:empresaId', async (req, res) => {
 router.post('/:competencia/:empresaId', async (req, res) => {
   try {
     const { competencia, empresaId } = req.params;
-    const empresa = await prisma.empresa.findUnique({
-      where: { id: empresaId },
-      include: { gruposTarefa: { where: { ativo: true } } }
-    });
-    if (!empresa) return res.status(404).json({ error: 'Empresa não encontrada' });
     let historico = await prisma.historicoMensal.findUnique({
       where: { empresaId_competencia: { empresaId, competencia } }
     });
