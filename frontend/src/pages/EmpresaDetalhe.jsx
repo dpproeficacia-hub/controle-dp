@@ -5,7 +5,12 @@ import { useAuth } from '../contexts/AuthContext';
 
 const fmtCNPJ = c => c?.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 const fmtMoeda = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '';
-const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : null;
+
+// Corrige fuso horário
+const fmtData = d => {
+  if (!d) return null;
+  return new Date(d).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
 
 export default function EmpresaDetalhe() {
   const { empresaId } = useParams();
@@ -13,6 +18,7 @@ export default function EmpresaDetalhe() {
   const navigate = useNavigate();
   const { isGestor } = useAuth();
   const competencia = state?.competencia || new Date().toISOString().slice(0, 7);
+  const grupoIdFoco = state?.grupoIdFoco || null; // grupo específico vindo do Controle Mensal
 
   const [empresa, setEmpresa] = useState(null);
   const [grupos, setGrupos] = useState([]);
@@ -28,16 +34,23 @@ export default function EmpresaDetalhe() {
   const [todasEmpresas, setTodasEmpresas] = useState([]);
   const [criando, setCriando] = useState(false);
   const [filtro, setFiltro] = useState('pendentes');
+  const [verTodas, setVerTodas] = useState(false); // expande para ver todas as tarefas
 
   useEffect(() => {
     carregarDados();
     if (isGestor) api.get('/empresas').then(r => setTodasEmpresas(r.data));
   }, [empresaId, competencia]);
 
+  // Se veio com foco em grupo específico, começa mostrando só ele
+  useEffect(() => {
+    if (grupoIdFoco) setVerTodas(false);
+    else setVerTodas(true);
+  }, [grupoIdFoco]);
+
   async function carregarDados() {
     const [e, g, en] = await Promise.all([
       api.get(`/empresas/${empresaId}`),
-      api.get(`/grupos/${empresaId}?competencia=${competencia}`), // passa competência para calcular datas
+      api.get(`/grupos/${empresaId}?competencia=${competencia}`),
       api.get(`/grupos/${empresaId}/entregas/${competencia}`)
     ]);
     setEmpresa(e.data);
@@ -76,7 +89,6 @@ export default function EmpresaDetalhe() {
     return eg.dataEntrega.slice(0, 10);
   }
 
-  // Calcula dias restantes até o vencimento real
   function diasRestantesVenc(grupo) {
     if (!grupo.dataVencimentoReal) return null;
     const venc = new Date(grupo.dataVencimentoReal);
@@ -205,7 +217,7 @@ export default function EmpresaDetalhe() {
 
   if (!empresa) return <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>;
 
-  // Ordena grupos por data de vencimento real (já vem ordenado do backend, mas garantimos aqui)
+  // Ordena por data de vencimento real
   const gruposOrdenados = [...grupos].sort((a, b) => {
     if (!a.dataVencimentoReal && !b.dataVencimentoReal) return 0;
     if (!a.dataVencimentoReal) return 1;
@@ -213,7 +225,10 @@ export default function EmpresaDetalhe() {
     return new Date(a.dataVencimentoReal) - new Date(b.dataVencimentoReal);
   });
 
-  const gruposFiltrados = filtro === 'pendentes'
+  // Se veio com foco, mostra só o grupo em foco (a menos que o usuário clique em "Ver todas")
+  const gruposVisiveis = grupoIdFoco && !verTodas
+    ? gruposOrdenados.filter(g => g.id === grupoIdFoco)
+    : filtro === 'pendentes'
     ? gruposOrdenados.filter(g => !isGrupoConcluido(g.id))
     : filtro === 'concluidos'
     ? gruposOrdenados.filter(g => isGrupoConcluido(g.id))
@@ -224,15 +239,23 @@ export default function EmpresaDetalhe() {
   const dispensados = grupos.filter(g => isGrupoDispensado(g.id)).length;
   const pct = totalGrupos ? Math.round((concluidos / totalGrupos) * 100) : 0;
 
+  const grupoFocoObj = grupoIdFoco ? grupos.find(g => g.id === grupoIdFoco) : null;
+
   return (
     <div>
       <div className="flex items-center gap-1.5 text-xs text-faint mb-5">
         <button onClick={() => navigate('/mensal')} className="text-blue-600 hover:underline">Controle Mensal</button>
         <span>›</span>
         <span className="text-ink font-medium">{empresa.razaoSocial}</span>
+        {grupoIdFoco && grupoFocoObj && !verTodas && (
+          <>
+            <span>›</span>
+            <span className="text-ink font-medium">{grupoFocoObj.nome}</span>
+          </>
+        )}
       </div>
 
-      {/* Cabeçalho */}
+      {/* Cabeçalho empresa */}
       <div className="card p-5 mb-4 flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-ink flex items-center justify-center font-display font-bold text-lg text-bg flex-shrink-0">
@@ -258,17 +281,42 @@ export default function EmpresaDetalhe() {
 
       <div className="grid grid-cols-[1fr_280px] gap-4">
         <div>
+          {/* Barra de navegação de tarefas */}
           <div className="flex items-center gap-2 mb-4 flex-wrap">
-            {[
-              ['pendentes', `Pendentes (${totalGrupos - concluidos})`],
-              ['concluidos', `Concluídas (${concluidos})`],
-              ['todas', `Todas (${totalGrupos})`]
-            ].map(([f, label]) => (
-              <button key={f} onClick={() => setFiltro(f)}
-                className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtro===f?'bg-ink text-bg border-ink':'bg-surface text-muted border-border hover:border-border2'}`}>
-                {label}
-              </button>
-            ))}
+            {/* Quando tem foco: mostra botão "Ver todas as tarefas" */}
+            {grupoIdFoco && !verTodas ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-ink">
+                    Exibindo: {grupoFocoObj?.nome}
+                  </span>
+                  <button onClick={() => setVerTodas(true)}
+                    className="text-xs text-blue-600 hover:underline border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors">
+                    Ver todas as {totalGrupos} tarefas
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {[
+                  ['pendentes', `Pendentes (${totalGrupos - concluidos})`],
+                  ['concluidos', `Concluídas (${concluidos})`],
+                  ['todas', `Todas (${totalGrupos})`]
+                ].map(([f, label]) => (
+                  <button key={f} onClick={() => setFiltro(f)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtro===f?'bg-ink text-bg border-ink':'bg-surface text-muted border-border hover:border-border2'}`}>
+                    {label}
+                  </button>
+                ))}
+                {/* Botão voltar ao foco se veio do mensal */}
+                {grupoIdFoco && verTodas && (
+                  <button onClick={() => setVerTodas(false)}
+                    className="text-xs text-blue-600 hover:underline border border-blue-200 px-2 py-1 rounded-lg hover:bg-blue-50 transition-colors ml-auto">
+                    ← Voltar para {grupoFocoObj?.nome}
+                  </button>
+                )}
+              </>
+            )}
             {isGestor && (
               <button onClick={() => setMostraForm(!mostraForm)} className="btn btn-primary text-xs ml-auto">
                 {mostraForm ? 'Cancelar' : '+ Nova tarefa'}
@@ -303,10 +351,7 @@ export default function EmpresaDetalhe() {
                 </div>
               </div>
               <div className="mb-4">
-                <label className="label mb-2">
-                  Subtarefas
-                  <span className="text-faint font-normal ml-1 text-xs">— marque "tem valor" para INSS, FGTS, IR</span>
-                </label>
+                <label className="label mb-2">Subtarefas</label>
                 <div className="space-y-2 mb-3">
                   {novoGrupo.subtarefas.map(s => (
                     <div key={s.id} className="flex items-center gap-2 px-3 py-2 bg-surface2 rounded-lg border border-border">
@@ -319,9 +364,9 @@ export default function EmpresaDetalhe() {
                 <div className="flex items-center gap-2">
                   <input className="input flex-1 h-8 text-xs" value={novaSubtarefa.nome}
                     onChange={e => setNovaSubtarefa(p => ({ ...p, nome: e.target.value }))}
-                    placeholder="Nome da subtarefa (ex: INSS, FGTS, Holerith...)"
+                    placeholder="Nome da subtarefa..."
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarSubtarefaForm())} />
-                  <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0 px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
+                  <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0 px-2 py-1 rounded border border-border hover:bg-surface2">
                     <input type="checkbox" checked={novaSubtarefa.temValor}
                       onChange={e => setNovaSubtarefa(p => ({ ...p, temValor: e.target.checked }))} className="accent-ink" />
                     💰 tem valor
@@ -361,19 +406,16 @@ export default function EmpresaDetalhe() {
             </form>
           )}
 
-          {gruposFiltrados.length === 0 && (
+          {gruposVisiveis.length === 0 && (
             <div className="card p-10 text-center">
               <p className="text-sm text-faint">
                 {filtro === 'pendentes' ? 'Todas as tarefas foram concluídas! 🎉' : filtro === 'concluidos' ? 'Nenhuma tarefa concluída ainda.' : 'Nenhuma tarefa cadastrada.'}
               </p>
-              {filtro === 'todas' && isGestor && (
-                <button onClick={() => setMostraForm(true)} className="btn btn-primary mt-3 mx-auto">+ Criar primeira tarefa</button>
-              )}
             </div>
           )}
 
           <div className="space-y-3">
-            {gruposFiltrados.map(grupo => {
+            {gruposVisiveis.map(grupo => {
               const concluido = isGrupoConcluido(grupo.id);
               const dispensado = isGrupoDispensado(grupo.id);
               const entregue = isGrupoEntregue(grupo.id);
@@ -386,7 +428,6 @@ export default function EmpresaDetalhe() {
                 <div key={grupo.id} className={`card overflow-hidden ${concluido ? 'opacity-80' : ''}`}>
                   <div className={`card-header ${dispensado ? 'bg-gray-50' : atrasado ? 'bg-red-50' : entregue ? 'bg-green-50' : 'bg-surface2'}`}>
                     <div className="flex items-center gap-3 flex-wrap">
-                      {/* Prazo de entrega na frente */}
                       {dataVencStr && (
                         <div className={`px-2.5 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${
                           dispensado ? 'bg-gray-100 text-gray-500' :
@@ -429,7 +470,6 @@ export default function EmpresaDetalhe() {
                     </div>
                   </div>
 
-                  {/* Subtarefas */}
                   {grupo.subtarefas?.length > 0 && !dispensado && (
                     <div>
                       {grupo.subtarefas.map(sub => (
@@ -459,7 +499,6 @@ export default function EmpresaDetalhe() {
                     </div>
                   )}
 
-                  {/* Data de entrega */}
                   {!dispensado && (
                     <div className="px-5 py-3 border-t border-border bg-surface2/50">
                       <div className="flex items-center gap-3">
@@ -481,7 +520,6 @@ export default function EmpresaDetalhe() {
                     </div>
                   )}
 
-                  {/* Rodapé */}
                   <div className="px-5 py-3 bg-surface2 border-t border-border flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {entregue && !dispensado && (
@@ -548,16 +586,31 @@ export default function EmpresaDetalhe() {
             </div>
           </div>
 
+          {/* Outras tarefas da empresa — navegação rápida */}
+          {grupoIdFoco && !verTodas && grupos.length > 1 && (
+            <div className="card">
+              <div className="card-header"><span className="card-title">Outras tarefas</span></div>
+              <div className="p-3 space-y-1">
+                {gruposOrdenados.filter(g => g.id !== grupoIdFoco).map(g => (
+                  <button key={g.id}
+                    onClick={() => navigate(`/mensal/${empresaId}`, { state: { competencia, grupoIdFoco: g.id } })}
+                    className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface2 transition-colors text-xs">
+                    <p className="font-semibold text-ink">{g.nome}</p>
+                    <p className="text-faint mt-0.5">
+                      {g.isDiaUtil ? `${g.diaVencimento}º d.u.` : `Dia ${g.diaVencimento}`}
+                      {g.mesSubsequente ? ' +1m' : ''}
+                      {g.dataVencimentoReal ? ` → ${fmtData(g.dataVencimentoReal)}` : ''}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {empresa.sindical && (
             <div className="card">
               <div className="card-header"><span className="card-title">Controle Sindical</span></div>
               <div className="p-4 space-y-2">
-                {empresa.sindical.sindicato && (
-                  <div className="flex justify-between text-xs">
-                    <span className="text-faint">Sindicato</span>
-                    <span className="font-medium text-right max-w-[150px]">{empresa.sindical.sindicato}</span>
-                  </div>
-                )}
                 <div className="flex justify-between text-xs">
                   <span className="text-faint">Última CCT</span>
                   <span className="font-medium">{empresa.sindical.ultimaCct}</span>
