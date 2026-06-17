@@ -9,18 +9,14 @@ router.use(authMiddleware);
 
 // ─── ROTAS FIXAS PRIMEIRO ────────────────────────────────────────────────────
 
-// Lista agrupada — TODOS os níveis podem ver (operador também)
 router.get('/', async (req, res) => {
   try {
     const { empresaId, page = '1', limit = '50', busca, agrupado } = req.query;
     const skip = (Number(page) - 1) * Number(limit);
-
-    // Filtra pelo escritório do usuário
     const where = {
       ativo: true,
       empresa: { escritorioId: req.user.escritorioId }
     };
-
     if (empresaId) where.empresaId = empresaId;
     if (busca) {
       where.OR = [
@@ -28,13 +24,8 @@ router.get('/', async (req, res) => {
         { empresa: { razaoSocial: { contains: busca, mode: 'insensitive' } } }
       ];
     }
-
-    // OPERADOR só vê tarefas das suas empresas
     if (req.user.nivel === 'OPERADOR') {
-      where.empresa = {
-        ...where.empresa,
-        responsavelId: req.user.id
-      };
+      where.empresa = { ...where.empresa, responsavelId: req.user.id };
     }
 
     if (agrupado === 'true') {
@@ -46,33 +37,23 @@ router.get('/', async (req, res) => {
         },
         orderBy: [{ nome: 'asc' }, { diaVencimento: 'asc' }]
       });
-
-      // Agrupa por nome + diaVencimento + tipo + mesSubsequente + isDiaUtil
       const mapa = new Map();
       for (const g of todos) {
         const chave = `${g.nome}||${g.diaVencimento}||${g.tipo}||${g.mesSubsequente}||${g.isDiaUtil}`;
         if (!mapa.has(chave)) {
           mapa.set(chave, {
-            nome: g.nome,
-            diaVencimento: g.diaVencimento,
-            isDiaUtil: g.isDiaUtil,
-            mesSubsequente: g.mesSubsequente,
-            tipo: g.tipo,
-            inicioCobrancaEm: g.inicioCobrancaEm,
-            subtarefas: g.subtarefas,
-            ids: [],
-            empresas: []
+            nome: g.nome, diaVencimento: g.diaVencimento, isDiaUtil: g.isDiaUtil,
+            mesSubsequente: g.mesSubsequente, tipo: g.tipo, inicioCobrancaEm: g.inicioCobrancaEm,
+            subtarefas: g.subtarefas, ids: [], empresas: []
           });
         }
         const grupo = mapa.get(chave);
         grupo.ids.push(g.id);
         grupo.empresas.push(g.empresa);
       }
-
       const agrupados = Array.from(mapa.values());
-      const totalAgrupado = agrupados.length;
       const paginado = agrupados.slice(skip, skip + Number(limit));
-      return res.json({ grupos: paginado, total: totalAgrupado, page: Number(page), limit: Number(limit) });
+      return res.json({ grupos: paginado, total: agrupados.length, page: Number(page), limit: Number(limit) });
     }
 
     const [grupos, total] = await Promise.all([
@@ -83,8 +64,7 @@ router.get('/', async (req, res) => {
           empresa: { select: { id: true, razaoSocial: true } }
         },
         orderBy: [{ empresa: { razaoSocial: 'asc' } }, { diaVencimento: 'asc' }],
-        skip,
-        take: Number(limit)
+        skip, take: Number(limit)
       }),
       prisma.grupoTarefa.count({ where })
     ]);
@@ -94,34 +74,19 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Editar todas as cópias de uma tarefa de uma vez
 router.put('/lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { ids, nome, diaVencimento, tipo, inicioCobrancaEm, isDiaUtil, mesSubsequente, subtarefas } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Nenhum ID informado.' });
-    }
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Nenhum ID informado.' });
     await prisma.grupoTarefa.updateMany({
       where: { id: { in: ids } },
-      data: {
-        nome,
-        diaVencimento: Number(diaVencimento),
-        tipo,
-        isDiaUtil: isDiaUtil || false,
-        mesSubsequente: mesSubsequente || false,
-        inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null,
-      }
+      data: { nome, diaVencimento: Number(diaVencimento), tipo, isDiaUtil: isDiaUtil || false, mesSubsequente: mesSubsequente || false, inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null }
     });
     if (Array.isArray(subtarefas)) {
-      await prisma.subtarefa.updateMany({
-        where: { grupoId: { in: ids } },
-        data: { ativa: false }
-      });
+      await prisma.subtarefa.updateMany({ where: { grupoId: { in: ids } }, data: { ativa: false } });
       for (const grupoId of ids) {
         for (let i = 0; i < subtarefas.length; i++) {
-          await prisma.subtarefa.create({
-            data: { grupoId, nome: subtarefas[i].nome, temValor: subtarefas[i].temValor || false, ordem: i }
-          });
+          await prisma.subtarefa.create({ data: { grupoId, nome: subtarefas[i].nome, temValor: subtarefas[i].temValor || false, ordem: i } });
         }
       }
     }
@@ -131,93 +96,49 @@ router.put('/lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   }
 });
 
-// Remover todas as cópias de uma tarefa
 router.delete('/lote', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
   try {
     const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: 'Nenhum ID informado.' });
-    }
-    await prisma.grupoTarefa.updateMany({
-      where: { id: { in: ids } },
-      data: { ativo: false }
-    });
+    if (!Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'Nenhum ID informado.' });
+    await prisma.grupoTarefa.updateMany({ where: { id: { in: ids } }, data: { ativo: false } });
     res.json({ ok: true, total: ids.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
-// Gerenciar empresas vinculadas a uma tarefa (adicionar/remover) — todos podem
 router.post('/gerenciar-empresas', async (req, res) => {
   try {
-    const { nomeGrupo, diaVencimento, tipo, adicionar, remover, escritorioId } = req.body;
-
-    // Validar que as empresas pertencem ao escritório do usuário
+    const { nomeGrupo, diaVencimento, tipo, adicionar, remover } = req.body;
     const escId = req.user.escritorioId;
-
-    // Remover: desativa os GrupoTarefa das empresas removidas
     if (Array.isArray(remover) && remover.length > 0) {
       await prisma.grupoTarefa.updateMany({
-        where: {
-          nome: nomeGrupo,
-          diaVencimento: Number(diaVencimento),
-          tipo,
-          empresaId: { in: remover },
-          empresa: { escritorioId: escId }
-        },
+        where: { nome: nomeGrupo, diaVencimento: Number(diaVencimento), tipo, empresaId: { in: remover }, empresa: { escritorioId: escId } },
         data: { ativo: false }
       });
     }
-
-    // Adicionar: busca um grupo existente para copiar as configs
     if (Array.isArray(adicionar) && adicionar.length > 0) {
       const modelo = await prisma.grupoTarefa.findFirst({
-        where: {
-          nome: nomeGrupo,
-          diaVencimento: Number(diaVencimento),
-          tipo,
-          ativo: true,
-          empresa: { escritorioId: escId }
-        },
+        where: { nome: nomeGrupo, diaVencimento: Number(diaVencimento), tipo, ativo: true, empresa: { escritorioId: escId } },
         include: { subtarefas: { where: { ativa: true } } }
       });
-
       if (!modelo) return res.status(404).json({ error: 'Tarefa modelo não encontrada.' });
-
       for (const empresaId of adicionar) {
-        // Verifica se já existe (pode estar inativo)
-        const existente = await prisma.grupoTarefa.findFirst({
-          where: { nome: nomeGrupo, diaVencimento: Number(diaVencimento), tipo, empresaId }
-        });
+        const existente = await prisma.grupoTarefa.findFirst({ where: { nome: nomeGrupo, diaVencimento: Number(diaVencimento), tipo, empresaId } });
         if (existente) {
-          // Reativa
-          await prisma.grupoTarefa.update({
-            where: { id: existente.id },
-            data: { ativo: true }
-          });
+          await prisma.grupoTarefa.update({ where: { id: existente.id }, data: { ativo: true } });
         } else {
-          // Cria novo
           await prisma.grupoTarefa.create({
             data: {
-              empresaId,
-              nome: modelo.nome,
-              diaVencimento: modelo.diaVencimento,
-              isDiaUtil: modelo.isDiaUtil,
-              mesSubsequente: modelo.mesSubsequente,
-              tipo: modelo.tipo,
-              inicioCobrancaEm: modelo.inicioCobrancaEm,
-              subtarefas: {
-                create: modelo.subtarefas.map((s, i) => ({
-                  nome: s.nome, temValor: s.temValor, ordem: i
-                }))
-              }
+              empresaId, nome: modelo.nome, diaVencimento: modelo.diaVencimento,
+              isDiaUtil: modelo.isDiaUtil, mesSubsequente: modelo.mesSubsequente,
+              tipo: modelo.tipo, inicioCobrancaEm: modelo.inicioCobrancaEm,
+              subtarefas: { create: modelo.subtarefas.map((s, i) => ({ nome: s.nome, temValor: s.temValor, ordem: i })) }
             }
           });
         }
       }
     }
-
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -241,22 +162,12 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
     for (const empresaId of ids) {
       const grupo = await prisma.grupoTarefa.create({
         data: {
-          empresaId, nome,
-          diaVencimento: Number(diaVencimento),
-          tipo: tipo || 'RECORRENTE',
-          isDiaUtil: isDiaUtil || false,
-          mesSubsequente: mesSubsequente || false,
+          empresaId, nome, diaVencimento: Number(diaVencimento),
+          tipo: tipo || 'RECORRENTE', isDiaUtil: isDiaUtil || false, mesSubsequente: mesSubsequente || false,
           inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null,
-          subtarefas: {
-            create: (subtarefas || []).map((s, i) => ({
-              nome: s.nome, temValor: s.temValor || false, ordem: i
-            }))
-          }
+          subtarefas: { create: (subtarefas || []).map((s, i) => ({ nome: s.nome, temValor: s.temValor || false, ordem: i })) }
         },
-        include: {
-          subtarefas: true,
-          empresa: { select: { id: true, razaoSocial: true } }
-        }
+        include: { subtarefas: true, empresa: { select: { id: true, razaoSocial: true } } }
       });
       criados.push(grupo);
     }
@@ -268,18 +179,37 @@ router.post('/', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
 
 // ─── ROTAS COM PARÂMETROS ─────────────────────────────────────────────────────
 
+// Retorna grupos da empresa com dataVencimentoReal calculada
 router.get('/:empresaId', async (req, res) => {
   try {
+    const { competencia } = req.query;
     const empresa = await prisma.empresa.findUnique({
       where: { id: req.params.empresaId },
-      select: { participaTarefas: true }
+      select: { participaTarefas: true, cidade: true, estado: true }
     });
     if (empresa && empresa.participaTarefas === false) return res.json([]);
+
     const grupos = await prisma.grupoTarefa.findMany({
       where: { empresaId: req.params.empresaId, ativo: true },
       include: { subtarefas: { where: { ativa: true }, orderBy: { ordem: 'asc' } } },
       orderBy: { diaVencimento: 'asc' }
     });
+
+    // Se vier competência, calcula a data real de vencimento de cada grupo
+    if (competencia) {
+      const feriadosMunicipais = await prisma.feriado.findMany({
+        where: { escritorioId: req.user.escritorioId }
+      });
+      const { calcularDataVencimento } = require('../utils/diasUteis');
+      const gruposComData = grupos.map(g => ({
+        ...g,
+        dataVencimentoReal: calcularDataVencimento(g, competencia, feriadosMunicipais, empresa.cidade, empresa.estado)
+      }));
+      // Ordena por data de vencimento real (cronológico)
+      gruposComData.sort((a, b) => a.dataVencimentoReal - b.dataVencimentoReal);
+      return res.json(gruposComData);
+    }
+
     res.json(grupos);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -308,18 +238,8 @@ router.put('/:id', requireNivel('GESTOR', 'ADMIN'), async (req, res) => {
     const { nome, diaVencimento, tipo, inicioCobrancaEm, isDiaUtil, mesSubsequente } = req.body;
     const grupo = await prisma.grupoTarefa.update({
       where: { id: req.params.id },
-      data: {
-        nome,
-        diaVencimento: Number(diaVencimento),
-        tipo,
-        isDiaUtil: isDiaUtil || false,
-        mesSubsequente: mesSubsequente || false,
-        inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null
-      },
-      include: {
-        subtarefas: { where: { ativa: true } },
-        empresa: { select: { id: true, razaoSocial: true } }
-      }
+      data: { nome, diaVencimento: Number(diaVencimento), tipo, isDiaUtil: isDiaUtil || false, mesSubsequente: mesSubsequente || false, inicioCobrancaEm: inicioCobrancaEm ? new Date(inicioCobrancaEm) : null },
+      include: { subtarefas: { where: { ativa: true } }, empresa: { select: { id: true, razaoSocial: true } } }
     });
     res.json(grupo);
   } catch (e) {
@@ -331,9 +251,7 @@ router.post('/:grupoId/subtarefas', requireNivel('GESTOR', 'ADMIN'), async (req,
   try {
     const { nome, temValor } = req.body;
     const count = await prisma.subtarefa.count({ where: { grupoId: req.params.grupoId } });
-    const sub = await prisma.subtarefa.create({
-      data: { grupoId: req.params.grupoId, nome, temValor: temValor || false, ordem: count }
-    });
+    const sub = await prisma.subtarefa.create({ data: { grupoId: req.params.grupoId, nome, temValor: temValor || false, ordem: count } });
     res.status(201).json(sub);
   } catch (e) {
     res.status(500).json({ error: e.message });
@@ -344,43 +262,23 @@ router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
   try {
     const { grupoId, competencia, empresaId } = req.params;
     const { entregue, dispensada, dataEntrega, subtarefas } = req.body;
-
-    let historico = await prisma.historicoMensal.findUnique({
-      where: { empresaId_competencia: { empresaId, competencia } }
-    });
+    let historico = await prisma.historicoMensal.findUnique({ where: { empresaId_competencia: { empresaId, competencia } } });
     if (!historico) {
-      historico = await prisma.historicoMensal.create({
-        data: { empresaId, competencia, responsavelId: req.user.id }
-      });
+      historico = await prisma.historicoMensal.create({ data: { empresaId, competencia, responsavelId: req.user.id } });
     }
-
     const entregaGrupo = await prisma.entregaGrupo.upsert({
       where: { grupoId_historicoId: { grupoId, historicoId: historico.id } },
-      create: {
-        grupoId, historicoId: historico.id,
-        entregue: entregue || false,
-        dispensada: dispensada || false,
-        dataEntrega: dataEntrega ? new Date(dataEntrega) : null,
-      },
-      update: {
-        entregue: entregue || false,
-        dispensada: dispensada || false,
-        dataEntrega: dataEntrega ? new Date(dataEntrega) : null,
-      }
+      create: { grupoId, historicoId: historico.id, entregue: entregue || false, dispensada: dispensada || false, dataEntrega: dataEntrega ? new Date(dataEntrega) : null },
+      update: { entregue: entregue || false, dispensada: dispensada || false, dataEntrega: dataEntrega ? new Date(dataEntrega) : null }
     });
-
     const todasEntregas = await prisma.entregaGrupo.findMany({ where: { historicoId: historico.id } });
     const todosGrupos = await prisma.grupoTarefa.findMany({ where: { empresaId, ativo: true } });
-    const totalGrupos = todosGrupos.length;
     const concluidos = todasEntregas.filter(e => e.entregue || e.dispensada).length;
-
     let status = 'NAO_INICIADO';
-    if (totalGrupos > 0 && concluidos >= totalGrupos) status = 'FINALIZADO';
+    if (todosGrupos.length > 0 && concluidos >= todosGrupos.length) status = 'FINALIZADO';
     else if (concluidos > 0) status = 'PARCIAL';
-
     await prisma.historicoMensal.update({ where: { id: historico.id }, data: { status } });
-
-    if (!dispensada && subtarefas && subtarefas.length > 0) {
+    if (!dispensada && subtarefas?.length > 0) {
       for (const sub of subtarefas) {
         await prisma.entregaSubtarefa.upsert({
           where: { subtarefaId_entregaGrupoId: { subtarefaId: sub.subtarefaId, entregaGrupoId: entregaGrupo.id } },
@@ -389,7 +287,6 @@ router.post('/:grupoId/entregar/:competencia/:empresaId', async (req, res) => {
         });
       }
     }
-
     res.json(entregaGrupo);
   } catch (e) {
     res.status(500).json({ error: e.message });
