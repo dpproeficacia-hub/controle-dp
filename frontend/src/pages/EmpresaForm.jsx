@@ -55,7 +55,7 @@ export default function EmpresaForm() {
   const [form, setForm] = useState({
     razaoSocial: '', cnpj: '', tipoDocumento: 'CNPJ',
     enquadramento: 'SIMPLES_NACIONAL', anexoSimples: 'ANEXO_III',
-    tipo: 'COMERCIO', nivel: 'N3', prazoEntrega: '', responsavelId: '',
+    tipo: 'COMERCIO', nivel: 'N3', responsavelId: '',
     cidade: '', estado: '', competenciaInicial: '',
     temFuncionarios: false, temProLabore: false, semMovimento: false,
     temFilial: false, fatorR: false, enviaReinf: false,
@@ -92,7 +92,6 @@ export default function EmpresaForm() {
         anexoSimples: d.anexoSimples || 'ANEXO_III',
         tipo: d.tipo,
         nivel: d.nivel,
-        prazoEntrega: d.prazoEntrega || '',
         responsavelId: d.responsavelId || '',
         cidade: d.cidade || '',
         estado: d.estado || '',
@@ -303,12 +302,6 @@ export default function EmpresaForm() {
                   </option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="label">Prazo de entrega (dia do mês)</label>
-              <input className="input" type="number" min="1" max="31" value={form.prazoEntrega}
-                onChange={e => set('prazoEntrega', Number(e.target.value))} placeholder="Ex: 25" />
             </div>
 
             {/* CIDADE E ESTADO — para cálculo de dias úteis */}
