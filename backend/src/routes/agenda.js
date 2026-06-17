@@ -5,11 +5,31 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 const prisma = new PrismaClient();
 
+const DIAS_ATE_EXCLUIR = 30;
+
 router.use(authMiddleware);
+
+// Remove eventos concluídos há mais de 30 dias — roda silenciosamente antes de listar
+async function limparEventosAntigos() {
+  const limite = new Date();
+  limite.setDate(limite.getDate() - DIAS_ATE_EXCLUIR);
+  try {
+    await prisma.eventoAgenda.deleteMany({
+      where: {
+        concluido: true,
+        dataConclusao: { lte: limite }
+      }
+    });
+  } catch (e) {
+    console.error('Erro ao limpar eventos antigos da agenda:', e.message);
+  }
+}
 
 // Listar eventos do usuário logado (ou de outro usuário se gestor/admin)
 router.get('/', async (req, res) => {
   try {
+    await limparEventosAntigos();
+
     const { usuarioId, concluido } = req.query;
 
     let targetUserId = req.user.id;
