@@ -63,8 +63,9 @@ export default function Empresas() {
 
   useEffect(() => { carregar(); }, [incluirSaiu]);
   useEffect(() => {
-    if (isGestor) api.get('/responsaveis').then(r => setResponsaveis(r.data));
-  }, [isGestor]);
+    // Lista de responsáveis é necessária para todos (campo de edição em lote ficou aberto a todos)
+    api.get('/responsaveis').then(r => setResponsaveis(r.data)).catch(() => {});
+  }, []);
 
   function carregar() {
     setLoading(true);
@@ -158,31 +159,31 @@ export default function Empresas() {
         <span className="text-xs text-faint ml-1">{filtradas.length} empresa(s)</span>
 
         <div className="flex items-center gap-2 ml-auto">
-          {isGestor && selecionadas.length > 0 && (
+          {/* Edição em lote — disponível para todos os níveis. Excluir continua restrito */}
+          {selecionadas.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 border border-blue-200 rounded-lg">
               <span className="text-xs font-semibold text-blue-700">{selecionadas.length} selecionada(s)</span>
               <button onClick={() => setMostraEdicaoLote(!mostraEdicaoLote)}
                 className="text-xs font-semibold text-blue-600 hover:text-blue-800 border border-blue-300 px-2 py-0.5 rounded hover:bg-blue-100 transition-colors">
                 ✏️ Editar em lote
               </button>
-              <button onClick={excluirEmLote} disabled={excluindoLote}
-                className="text-xs font-semibold text-red-600 hover:text-red-800 border border-red-300 px-2 py-0.5 rounded hover:bg-red-100 transition-colors">
-                {excluindoLote ? 'Excluindo...' : '🗑 Excluir'}
-              </button>
+              {isGestor && (
+                <button onClick={excluirEmLote} disabled={excluindoLote}
+                  className="text-xs font-semibold text-red-600 hover:text-red-800 border border-red-300 px-2 py-0.5 rounded hover:bg-red-100 transition-colors">
+                  {excluindoLote ? 'Excluindo...' : '🗑 Excluir'}
+                </button>
+              )}
               <button onClick={() => setSelecionadas([])} className="text-xs text-muted hover:text-ink">✕</button>
             </div>
           )}
-          {isGestor && (
-            <>
-              <button onClick={() => navigate('/importacao')} className="btn btn-secondary">↑ Importar</button>
-              <button onClick={() => navigate('/empresas/nova')} className="btn btn-primary">+ Cadastrar empresa</button>
-            </>
-          )}
+          {/* Cadastrar empresa e importar — todos os níveis */}
+          <button onClick={() => navigate('/importacao')} className="btn btn-secondary">↑ Importar</button>
+          <button onClick={() => navigate('/empresas/nova')} className="btn btn-primary">+ Cadastrar empresa</button>
         </div>
       </div>
 
-      {/* Painel de edição em lote */}
-      {mostraEdicaoLote && isGestor && selecionadas.length > 0 && (
+      {/* Painel de edição em lote — disponível para todos */}
+      {mostraEdicaoLote && selecionadas.length > 0 && (
         <div className="card p-5 mb-4 border-2 border-blue-200">
           <div className="flex items-center justify-between mb-4">
             <div>
@@ -273,13 +274,12 @@ export default function Empresas() {
           <table className="w-full">
             <thead className="bg-surface2">
               <tr>
-                {isGestor && (
-                  <th className="px-4 py-2.5 border-b border-border w-8">
-                    <Checkbox
-                      checked={todasSelecionadas || algumasSelecionadas}
-                      onClick={toggleTodas} />
-                  </th>
-                )}
+                {/* Checkbox de seleção em lote disponível para todos */}
+                <th className="px-4 py-2.5 border-b border-border w-8">
+                  <Checkbox
+                    checked={todasSelecionadas || algumasSelecionadas}
+                    onClick={toggleTodas} />
+                </th>
                 {['Empresa', 'Enquadramento', 'Tipo', 'Responsável', 'Nível', 'Prazo', ''].map(h => (
                   <th key={h} className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-faint border-b border-border">{h}</th>
                 ))}
@@ -291,13 +291,11 @@ export default function Empresas() {
                   key={emp.id}
                   onClick={() => navigate(`/empresas/${emp.id}/editar`, { state: { listaIds: filtradas.map(e => e.id) } })}
                   className={`border-b border-border last:border-b-0 cursor-pointer hover:bg-blue-50 transition-colors ${emp.saiuDoEscritorio ? 'opacity-50' : ''} ${selecionadas.includes(emp.id) ? 'bg-blue-50' : ''}`}>
-                  {isGestor && (
-                    <td className="px-4 py-3 w-8" onClick={e => e.stopPropagation()}>
-                      <Checkbox
-                        checked={selecionadas.includes(emp.id)}
-                        onClick={e => toggleSelecao(e, emp.id)} />
-                    </td>
-                  )}
+                  <td className="px-4 py-3 w-8" onClick={e => e.stopPropagation()}>
+                    <Checkbox
+                      checked={selecionadas.includes(emp.id)}
+                      onClick={e => toggleSelecao(e, emp.id)} />
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -345,7 +343,7 @@ export default function Empresas() {
               ))}
               {!filtradas.length && (
                 <tr>
-                  <td colSpan={isGestor ? 8 : 7} className="px-4 py-10 text-center text-sm text-faint">
+                  <td colSpan={8} className="px-4 py-10 text-center text-sm text-faint">
                     Nenhuma empresa encontrada
                   </td>
                 </tr>
