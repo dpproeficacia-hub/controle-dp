@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 const fmtCNPJ = c => c?.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
 const fmtMoeda = v => v ? `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '';
+const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : null;
 
 export default function EmpresaDetalhe() {
   const { empresaId } = useParams();
@@ -36,7 +37,7 @@ export default function EmpresaDetalhe() {
   async function carregarDados() {
     const [e, g, en] = await Promise.all([
       api.get(`/empresas/${empresaId}`),
-      api.get(`/grupos/${empresaId}`),
+      api.get(`/grupos/${empresaId}?competencia=${competencia}`), // passa competência para calcular datas
       api.get(`/grupos/${empresaId}/entregas/${competencia}`)
     ]);
     setEmpresa(e.data);
@@ -50,14 +51,8 @@ export default function EmpresaDetalhe() {
     const eg = entregas[grupoId];
     return eg?.entregue || eg?.dispensada || false;
   }
-
-  function isGrupoDispensado(grupoId) {
-    return entregas[grupoId]?.dispensada || false;
-  }
-
-  function isGrupoEntregue(grupoId) {
-    return entregas[grupoId]?.entregue || false;
-  }
+  function isGrupoDispensado(grupoId) { return entregas[grupoId]?.dispensada || false; }
+  function isGrupoEntregue(grupoId) { return entregas[grupoId]?.entregue || false; }
 
   function isSubtarefaOk(grupoId, subtarefaId) {
     const eg = entregas[grupoId];
@@ -81,6 +76,15 @@ export default function EmpresaDetalhe() {
     return eg.dataEntrega.slice(0, 10);
   }
 
+  // Calcula dias restantes até o vencimento real
+  function diasRestantesVenc(grupo) {
+    if (!grupo.dataVencimentoReal) return null;
+    const venc = new Date(grupo.dataVencimentoReal);
+    venc.setHours(0,0,0,0);
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    return Math.floor((venc - hoje) / 86400000);
+  }
+
   function toggleSubtarefa(grupoId, subtarefaId) {
     setEntregas(prev => {
       const eg = prev[grupoId] || { grupoId, entregue: false, dispensada: false, subtarefas: [] };
@@ -101,16 +105,9 @@ export default function EmpresaDetalhe() {
     const hoje = new Date().toISOString().slice(0, 10);
     setEntregas(prev => ({
       ...prev,
-      [grupoId]: {
-        ...(prev[grupoId] || { grupoId, subtarefas: [] }),
-        entregue,
-        dispensada: false,
-        dataEntrega: entregue ? hoje : null
-      }
+      [grupoId]: { ...(prev[grupoId] || { grupoId, subtarefas: [] }), entregue, dispensada: false, dataEntrega: entregue ? hoje : null }
     }));
-    if (entregue) {
-      setDatas(prev => ({ ...prev, [grupoId]: hoje }));
-    }
+    if (entregue) setDatas(prev => ({ ...prev, [grupoId]: hoje }));
   }
 
   async function salvarGrupo(grupo) {
@@ -123,7 +120,6 @@ export default function EmpresaDetalhe() {
         const valNum = parseFloat(valStr.replace(/[^\d,]/g, '').replace(',', '.')) || null;
         return { subtarefaId: s.id, ok: isSubtarefaOk(grupo.id, s.id), valor: valNum };
       });
-
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
         entregue: eg.entregue || false,
         dispensada: eg.dispensada || false,
@@ -134,28 +130,20 @@ export default function EmpresaDetalhe() {
       setDatas(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
       setSalvo(prev => ({ ...prev, [grupo.id]: true }));
       setTimeout(() => setSalvo(prev => ({ ...prev, [grupo.id]: false })), 2000);
-    } catch {
-      alert('Erro ao salvar. Tente novamente.');
-    } finally {
-      setSalvando(prev => ({ ...prev, [grupo.id]: false }));
-    }
+    } catch { alert('Erro ao salvar. Tente novamente.'); }
+    finally { setSalvando(prev => ({ ...prev, [grupo.id]: false })); }
   }
 
   async function dispensarGrupo(grupo) {
-    if (!window.confirm(`Dispensar "${grupo.nome}" neste mês?\n\nA tarefa será marcada como concluída sem entrega.`)) return;
+    if (!window.confirm(`Dispensar "${grupo.nome}" neste mês?`)) return;
     setSalvando(prev => ({ ...prev, [grupo.id]: true }));
     try {
       await api.post(`/grupos/${grupo.id}/entregar/${competencia}/${empresaId}`, {
         entregue: false, dispensada: true, dataEntrega: null, subtarefas: []
       });
       await carregarDados();
-      setSalvo(prev => ({ ...prev, [grupo.id]: true }));
-      setTimeout(() => setSalvo(prev => ({ ...prev, [grupo.id]: false })), 2000);
-    } catch {
-      alert('Erro ao dispensar tarefa.');
-    } finally {
-      setSalvando(prev => ({ ...prev, [grupo.id]: false }));
-    }
+    } catch { alert('Erro ao dispensar tarefa.'); }
+    finally { setSalvando(prev => ({ ...prev, [grupo.id]: false })); }
   }
 
   async function desfazerEntrega(grupo) {
@@ -166,11 +154,8 @@ export default function EmpresaDetalhe() {
       });
       await carregarDados();
       setDatas(prev => { const n = { ...prev }; delete n[grupo.id]; return n; });
-    } catch {
-      alert('Erro ao desfazer entrega.');
-    } finally {
-      setSalvando(prev => ({ ...prev, [grupo.id]: false }));
-    }
+    } catch { alert('Erro ao desfazer entrega.'); }
+    finally { setSalvando(prev => ({ ...prev, [grupo.id]: false })); }
   }
 
   async function desfazerDispensa(grupo) {
@@ -180,11 +165,8 @@ export default function EmpresaDetalhe() {
         entregue: false, dispensada: false, dataEntrega: null, subtarefas: []
       });
       await carregarDados();
-    } catch {
-      alert('Erro ao desfazer dispensa.');
-    } finally {
-      setSalvando(prev => ({ ...prev, [grupo.id]: false }));
-    }
+    } catch { alert('Erro ao desfazer dispensa.'); }
+    finally { setSalvando(prev => ({ ...prev, [grupo.id]: false })); }
   }
 
   async function excluirGrupo(grupoId) {
@@ -217,20 +199,25 @@ export default function EmpresaDetalhe() {
       setEmpresasSelecionadas([]);
       setMostraForm(false);
       await carregarDados();
-    } catch {
-      alert('Erro ao criar grupo.');
-    } finally {
-      setCriando(false);
-    }
+    } catch { alert('Erro ao criar grupo.'); }
+    finally { setCriando(false); }
   }
 
   if (!empresa) return <div className="flex items-center justify-center h-48 text-muted text-sm">Carregando...</div>;
 
+  // Ordena grupos por data de vencimento real (já vem ordenado do backend, mas garantimos aqui)
+  const gruposOrdenados = [...grupos].sort((a, b) => {
+    if (!a.dataVencimentoReal && !b.dataVencimentoReal) return 0;
+    if (!a.dataVencimentoReal) return 1;
+    if (!b.dataVencimentoReal) return -1;
+    return new Date(a.dataVencimentoReal) - new Date(b.dataVencimentoReal);
+  });
+
   const gruposFiltrados = filtro === 'pendentes'
-    ? grupos.filter(g => !isGrupoConcluido(g.id))
+    ? gruposOrdenados.filter(g => !isGrupoConcluido(g.id))
     : filtro === 'concluidos'
-    ? grupos.filter(g => isGrupoConcluido(g.id))
-    : grupos;
+    ? gruposOrdenados.filter(g => isGrupoConcluido(g.id))
+    : gruposOrdenados;
 
   const totalGrupos = grupos.length;
   const concluidos = grupos.filter(g => isGrupoConcluido(g.id)).length;
@@ -245,7 +232,7 @@ export default function EmpresaDetalhe() {
         <span className="text-ink font-medium">{empresa.razaoSocial}</span>
       </div>
 
-      {/* Cabeçalho empresa */}
+      {/* Cabeçalho */}
       <div className="card p-5 mb-4 flex items-start justify-between">
         <div className="flex items-center gap-4">
           <div className="w-12 h-12 rounded-xl bg-ink flex items-center justify-center font-display font-bold text-lg text-bg flex-shrink-0">
@@ -260,7 +247,6 @@ export default function EmpresaDetalhe() {
               {empresa.semMovimento && <span className="pill pill-gray">Sem movimento</span>}
               {empresa.enviaReinf && <span className="pill pill-purple">REINF</span>}
               {empresa.fatorR && <span className="pill pill-teal">Fator R</span>}
-              {!empresa.participaTarefas && <span className="pill pill-amber">Sem controle de tarefas</span>}
             </div>
           </div>
         </div>
@@ -269,16 +255,6 @@ export default function EmpresaDetalhe() {
           <button onClick={() => navigate(`/empresas/${empresa.id}/editar`)} className="btn btn-secondary text-xs">Editar cadastro</button>
         </div>
       </div>
-
-      {!empresa.participaTarefas && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-center gap-3">
-          <span className="text-amber-600 text-lg">⚠️</span>
-          <div>
-            <p className="text-sm font-semibold text-amber-800">Esta empresa não participa do controle de tarefas</p>
-            <p className="text-xs text-amber-600 mt-0.5">Para ativar, edite o cadastro e habilite "Participa do controle de tarefas".</p>
-          </div>
-        </div>
-      )}
 
       <div className="grid grid-cols-[1fr_280px] gap-4">
         <div>
@@ -326,11 +302,10 @@ export default function EmpresaDetalhe() {
                   </select>
                 </div>
               </div>
-
               <div className="mb-4">
                 <label className="label mb-2">
                   Subtarefas
-                  <span className="text-faint font-normal ml-1 text-xs">— marque "tem valor" para campos como INSS, FGTS, IR</span>
+                  <span className="text-faint font-normal ml-1 text-xs">— marque "tem valor" para INSS, FGTS, IR</span>
                 </label>
                 <div className="space-y-2 mb-3">
                   {novoGrupo.subtarefas.map(s => (
@@ -344,18 +319,16 @@ export default function EmpresaDetalhe() {
                 <div className="flex items-center gap-2">
                   <input className="input flex-1 h-8 text-xs" value={novaSubtarefa.nome}
                     onChange={e => setNovaSubtarefa(p => ({ ...p, nome: e.target.value }))}
-                    placeholder="Nome da subtarefa (ex: INSS, FGTS, IR...)"
+                    placeholder="Nome da subtarefa (ex: INSS, FGTS, Holerith...)"
                     onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), adicionarSubtarefaForm())} />
                   <label className="flex items-center gap-1.5 text-xs text-muted cursor-pointer select-none flex-shrink-0 px-2 py-1 rounded border border-border hover:bg-surface2 transition-colors">
                     <input type="checkbox" checked={novaSubtarefa.temValor}
-                      onChange={e => setNovaSubtarefa(p => ({ ...p, temValor: e.target.checked }))}
-                      className="accent-ink" />
+                      onChange={e => setNovaSubtarefa(p => ({ ...p, temValor: e.target.checked }))} className="accent-ink" />
                     💰 tem valor
                   </label>
                   <button type="button" onClick={adicionarSubtarefaForm} className="btn btn-secondary text-xs h-8 px-3 flex-shrink-0">+ Add</button>
                 </div>
               </div>
-
               <div className="mb-4">
                 <label className="label mb-2">Aplicar para</label>
                 <div className="bg-surface2 border border-border rounded-lg p-3 max-h-48 overflow-y-auto">
@@ -382,7 +355,6 @@ export default function EmpresaDetalhe() {
                   {empresasSelecionadas.length === 0 ? 'Nenhuma selecionada — apenas esta empresa' : `${empresasSelecionadas.length} empresa(s) selecionada(s)`}
                 </p>
               </div>
-
               <button type="submit" disabled={criando} className="btn btn-primary">
                 {criando ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" /> : 'Criar grupo de tarefas'}
               </button>
@@ -405,17 +377,29 @@ export default function EmpresaDetalhe() {
               const concluido = isGrupoConcluido(grupo.id);
               const dispensado = isGrupoDispensado(grupo.id);
               const entregue = isGrupoEntregue(grupo.id);
-              const today = new Date().getDate();
-              const atrasado = !concluido && grupo.diaVencimento < today;
+              const diasVenc = diasRestantesVenc(grupo);
+              const atrasado = !concluido && diasVenc !== null && diasVenc < 0;
+              const dataVencStr = grupo.dataVencimentoReal ? fmtData(grupo.dataVencimentoReal) : null;
               const dataEntregaAtual = getDataEntrega(grupo.id);
 
               return (
                 <div key={grupo.id} className={`card overflow-hidden ${concluido ? 'opacity-80' : ''}`}>
                   <div className={`card-header ${dispensado ? 'bg-gray-50' : atrasado ? 'bg-red-50' : entregue ? 'bg-green-50' : 'bg-surface2'}`}>
-                    <div className="flex items-center gap-3">
-                      <div className={`px-2.5 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${dispensado ? 'bg-gray-100 text-gray-500' : atrasado ? 'bg-red-100 text-red-700' : entregue ? 'bg-green-100 text-green-700' : 'bg-white border border-border text-muted'}`}>
-                        Dia {grupo.diaVencimento}
-                      </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {/* Prazo de entrega na frente */}
+                      {dataVencStr && (
+                        <div className={`px-2.5 py-1 rounded-lg text-xs font-bold flex-shrink-0 ${
+                          dispensado ? 'bg-gray-100 text-gray-500' :
+                          atrasado   ? 'bg-red-100 text-red-700' :
+                          entregue   ? 'bg-green-100 text-green-700' :
+                          diasVenc !== null && diasVenc <= 3 ? 'bg-amber-100 text-amber-700' :
+                          'bg-white border border-border text-muted'
+                        }`}>
+                          {grupo.isDiaUtil ? `${grupo.diaVencimento}º d.u.` : `Dia ${grupo.diaVencimento}`}
+                          {grupo.mesSubsequente && ' +1m'}
+                          <span className="ml-1.5 font-normal opacity-70">→ {dataVencStr}</span>
+                        </div>
+                      )}
                       <span className={`card-title ${dispensado ? 'line-through text-faint' : entregue ? 'line-through text-faint' : atrasado ? 'text-red-700' : ''}`}>
                         {grupo.nome}
                       </span>
@@ -424,22 +408,19 @@ export default function EmpresaDetalhe() {
                       </span>
                       {atrasado && <span className="pill pill-red text-[10px]">Atrasado</span>}
                       {dispensado && <span className="pill pill-gray text-[10px]">Dispensada</span>}
+                      {!atrasado && !concluido && diasVenc !== null && diasVenc <= 3 && diasVenc >= 0 && (
+                        <span className="pill pill-amber text-[10px]">⚠ {diasVenc === 0 ? 'Vence hoje' : `${diasVenc} dia${diasVenc !== 1 ? 's' : ''}`}</span>
+                      )}
                     </div>
                     <div className="flex items-center gap-2">
-                      {entregue && !dispensado && (
-                        <span className="pill pill-green text-[10px]">✓ Entregue</span>
-                      )}
+                      {entregue && !dispensado && <span className="pill pill-green text-[10px]">✓ Entregue</span>}
                       {!concluido && (
                         <>
                           <button onClick={() => marcarGrupoEntregue(grupo.id, true)}
-                            className="text-xs text-green-600 font-medium hover:underline">
-                            Marcar entregue
-                          </button>
+                            className="text-xs text-green-600 font-medium hover:underline">Marcar entregue</button>
                           <span className="text-faint text-xs">·</span>
                           <button onClick={() => dispensarGrupo(grupo)}
-                            className="text-xs text-gray-500 font-medium hover:text-gray-700 hover:underline">
-                            Dispensar
-                          </button>
+                            className="text-xs text-gray-500 font-medium hover:text-gray-700 hover:underline">Dispensar</button>
                         </>
                       )}
                       {isGestor && (
@@ -478,25 +459,22 @@ export default function EmpresaDetalhe() {
                     </div>
                   )}
 
-                  {/* Campo de data de entrega — para todas as tarefas */}
+                  {/* Data de entrega */}
                   {!dispensado && (
                     <div className="px-5 py-3 border-t border-border bg-surface2/50">
                       <div className="flex items-center gap-3">
                         <div className="flex-1 max-w-[220px]">
                           <label className="label mb-1">
-                            Data de entrega
-                            <span className="text-faint font-normal ml-1">(opcional)</span>
+                            Data de entrega <span className="text-faint font-normal">(opcional)</span>
                           </label>
-                          <input
-                            type="date"
-                            className="input text-xs h-8"
+                          <input type="date" className="input text-xs h-8"
                             value={dataEntregaAtual}
                             disabled={entregue && !isGestor}
                             onChange={e => setDatas(prev => ({ ...prev, [grupo.id]: e.target.value }))} />
                         </div>
                         {entregue && entregas[grupo.id]?.dataEntrega && (
                           <p className="text-xs text-green-700 mt-4">
-                            ✓ Entregue em {new Date(entregas[grupo.id].dataEntrega).toLocaleDateString('pt-BR')}
+                            ✓ Entregue em {fmtData(entregas[grupo.id].dataEntrega)}
                           </p>
                         )}
                       </div>
@@ -507,16 +485,10 @@ export default function EmpresaDetalhe() {
                   <div className="px-5 py-3 bg-surface2 border-t border-border flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       {entregue && !dispensado && (
-                        <button onClick={() => desfazerEntrega(grupo)}
-                          className="text-xs text-amber-600 hover:underline">
-                          Desfazer entrega
-                        </button>
+                        <button onClick={() => desfazerEntrega(grupo)} className="text-xs text-amber-600 hover:underline">Desfazer entrega</button>
                       )}
                       {dispensado && (
-                        <button onClick={() => desfazerDispensa(grupo)}
-                          className="text-xs text-amber-600 hover:underline">
-                          Desfazer dispensa
-                        </button>
+                        <button onClick={() => desfazerDispensa(grupo)} className="text-xs text-amber-600 hover:underline">Desfazer dispensa</button>
                       )}
                     </div>
                     {!dispensado && (
@@ -549,16 +521,12 @@ export default function EmpresaDetalhe() {
             <p className="font-display font-bold text-4xl" style={{ color: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D' }}>
               {pct}%
             </p>
-            <p className="text-xs text-faint mt-1">
-              {pct === 100 ? 'Tudo concluído! 🎉' : pct > 0 ? 'Em andamento' : 'Não iniciado'}
-            </p>
+            <p className="text-xs text-faint mt-1">{pct === 100 ? 'Tudo concluído! 🎉' : pct > 0 ? 'Em andamento' : 'Não iniciado'}</p>
             <div className="progress-bar mt-3">
               <div className="progress-fill" style={{ width: `${pct}%`, background: pct === 100 ? '#3B6D11' : pct > 0 ? '#854F0B' : '#A32D2D' }} />
             </div>
             <p className="text-xs text-faint mt-2">{concluidos}/{totalGrupos} concluídas</p>
-            {dispensados > 0 && (
-              <p className="text-xs text-gray-400 mt-0.5">{dispensados} dispensada{dispensados !== 1 ? 's' : ''}</p>
-            )}
+            {dispensados > 0 && <p className="text-xs text-gray-400 mt-0.5">{dispensados} dispensada{dispensados !== 1 ? 's' : ''}</p>}
           </div>
 
           <div className="card">
@@ -584,16 +552,16 @@ export default function EmpresaDetalhe() {
             <div className="card">
               <div className="card-header"><span className="card-title">Controle Sindical</span></div>
               <div className="p-4 space-y-2">
-                {[
-                  ['Sindicato', empresa.sindical.sindicato],
-                  ['Data-base', empresa.sindical.dataBase],
-                  ['Última CCT', empresa.sindical.ultimaCct]
-                ].map(([l, v]) => (
-                  <div key={l} className="flex justify-between text-xs">
-                    <span className="text-faint">{l}</span>
-                    <span className="font-medium text-right max-w-[150px]">{v}</span>
+                {empresa.sindical.sindicato && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-faint">Sindicato</span>
+                    <span className="font-medium text-right max-w-[150px]">{empresa.sindical.sindicato}</span>
                   </div>
-                ))}
+                )}
+                <div className="flex justify-between text-xs">
+                  <span className="text-faint">Última CCT</span>
+                  <span className="font-medium">{empresa.sindical.ultimaCct}</span>
+                </div>
                 <div className="flex justify-between text-xs">
                   <span className="text-faint">Status CCT</span>
                   <span className={`pill text-[10px] ${empresa.sindical.ultimaCct >= new Date().getFullYear() ? 'pill-green' : 'pill-red'}`}>
