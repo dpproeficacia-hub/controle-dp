@@ -20,7 +20,10 @@ function Bolinha({ tipo }) {
   return <span title={b.title} className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${b.bg}`} />;
 }
 
-const fmtData = d => d ? new Date(d).toLocaleDateString('pt-BR') : null;
+const fmtData = d => {
+  if (!d) return null;
+  return new Date(d).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+};
 
 export default function Mensal() {
   const { competencia } = useOutletContext();
@@ -48,11 +51,11 @@ export default function Mensal() {
 
   const filtradas = linhas.filter(l => {
     const matchTipo =
-      filtroTipo === 'TODAS'          ? true :
-      filtroTipo === 'FUNCIONARIOS'   ? l.temFuncionarios :
-      filtroTipo === 'PROLABORE'      ? l.temProLabore :
-      filtroTipo === 'SO_PROLABORE'   ? (l.temProLabore && !l.temFuncionarios) :
-      filtroTipo === 'SEM_MOVIMENTO'  ? l.semMovimento : true;
+      filtroTipo === 'TODAS'         ? true :
+      filtroTipo === 'FUNCIONARIOS'  ? l.temFuncionarios :
+      filtroTipo === 'PROLABORE'     ? l.temProLabore :
+      filtroTipo === 'SO_PROLABORE'  ? (l.temProLabore && !l.temFuncionarios) :
+      filtroTipo === 'SEM_MOVIMENTO' ? l.semMovimento : true;
 
     const matchStatus =
       filtroStatus === 'TODOS'      ? true :
@@ -92,15 +95,15 @@ export default function Mensal() {
 
   const emAtraso    = linhas.filter(l => !l.concluido && l._bolinha === 'vermelho').length;
   const proximoVenc = linhas.filter(l => !l.concluido && l._bolinha === 'laranja').length;
-  const pendentes   = linhas.filter(l => !l.concluido).length;
   const concluidas  = linhas.filter(l => l.concluido).length;
 
   return (
     <div>
       {/* KPIs */}
-      {(emAtraso > 0 || proximoVenc > 0) && (
+      {(emAtraso > 0 || proximoVenc > 0 || concluidas > 0) && (
         <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
+          <div
+            className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
             onClick={() => setFiltroBolinha(filtroBolinha === 'vermelho' ? 'TODOS' : 'vermelho')}>
             <div className="w-3 h-3 rounded-full bg-red-500 flex-shrink-0" />
             <div>
@@ -108,7 +111,8 @@ export default function Mensal() {
               <p className="text-[10px] text-faint">entrega vencida</p>
             </div>
           </div>
-          <div className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
+          <div
+            className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
             onClick={() => setFiltroBolinha(filtroBolinha === 'laranja' ? 'TODOS' : 'laranja')}>
             <div className="w-3 h-3 rounded-full bg-orange-400 flex-shrink-0" />
             <div>
@@ -136,7 +140,7 @@ export default function Mensal() {
         <div className="flex gap-1.5 flex-wrap">
           {tiposFiltro.map(f => (
             <button key={f.key} onClick={() => setFiltroTipo(f.key)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtroTipo===f.key?'bg-ink text-bg border-ink':'bg-surface text-muted border-border hover:border-border2'}`}>
+              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${filtroTipo === f.key ? 'bg-ink text-bg border-ink' : 'bg-surface text-muted border-border hover:border-border2'}`}>
               {f.label}
             </button>
           ))}
@@ -171,20 +175,24 @@ export default function Mensal() {
             <tbody>
               {filtradas.map(l => (
                 <tr key={l.id}
-                  onClick={() => navigate(`/mensal/${l.empresaId}`, { state: { competencia } })}
+                  onClick={() => navigate(`/mensal/${l.empresaId}`, {
+                    state: { competencia, grupoIdFoco: l.grupoId }
+                  })}
                   className={`border-b border-border last:border-b-0 hover:bg-blue-50 cursor-pointer transition-colors ${l.concluido ? 'opacity-60' : ''}`}>
+
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{l.razaoSocial}</p>
                     <p className="text-xs text-faint font-mono">
                       {l.cnpj?.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5')}
                     </p>
                     <div className="flex gap-1 mt-0.5 flex-wrap">
-                      {l.temFuncionarios && l.temProLabore && <span className="text-[10px] text-blue-600">Func. + PL</span>}
+                      {l.temFuncionarios && l.temProLabore  && <span className="text-[10px] text-blue-600">Func. + PL</span>}
                       {l.temFuncionarios && !l.temProLabore && <span className="text-[10px] text-blue-600">Funcionários</span>}
                       {!l.temFuncionarios && l.temProLabore && <span className="text-[10px] text-purple-600">Só pró-labore</span>}
                       {l.semMovimento && <span className="text-[10px] text-gray-500">Sem movimento</span>}
                     </div>
                   </td>
+
                   <td className="px-4 py-3">
                     <p className="text-sm font-semibold text-ink">{l.nomeTarefa}</p>
                     <p className="text-[10px] text-faint mt-0.5">
@@ -192,6 +200,7 @@ export default function Mensal() {
                       {l.mesSubsequente ? ' · mês seguinte' : ' · mesmo mês'}
                     </p>
                   </td>
+
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
                       {!l.concluido && <Bolinha tipo={l._bolinha} />}
@@ -202,18 +211,24 @@ export default function Mensal() {
                         </p>
                         {!l.concluido && (
                           <p className="text-[10px] text-faint">
-                            {l.diasRestantes < 0 ? `${Math.abs(l.diasRestantes)} dia(s) atraso` : l.diasRestantes === 0 ? 'Vence hoje' : `${l.diasRestantes} dia(s)`}
+                            {l.diasRestantes < 0
+                              ? `${Math.abs(l.diasRestantes)} dia(s) atraso`
+                              : l.diasRestantes === 0 ? 'Vence hoje'
+                              : `${l.diasRestantes} dia(s)`}
                           </p>
                         )}
                       </div>
                     </div>
                   </td>
+
                   <td className="px-4 py-3 text-xs text-muted">{l.responsavel?.nome || '—'}</td>
+
                   <td className="px-4 py-3">
                     <span className={`w-7 h-7 rounded-lg inline-flex items-center justify-center text-xs font-bold ${NIVEL_BG[l.nivel]}`}>
                       {l.nivel}
                     </span>
                   </td>
+
                   <td className="px-4 py-3">
                     {l.concluido ? (
                       <span className="pill pill-green text-[10px]">
