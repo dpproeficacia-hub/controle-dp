@@ -20,9 +20,11 @@ function Bolinha({ tipo }) {
   return <span title={b.title} className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${b.bg}`} />;
 }
 
+// A data já vem do backend fixada em meio-dia UTC, representando o dia calendário correto.
+// Formatamos em UTC para não introduzir deslocamento de fuso na exibição.
 const fmtData = d => {
   if (!d) return null;
-  return new Date(d).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+  return new Date(d).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 };
 
 const Checkbox = ({ checked, onClick, indeterminate }) => (
@@ -44,7 +46,7 @@ export default function Mensal() {
   const [busca, setBusca] = useState('');
   const [selecionadas, setSelecionadas] = useState([]);
   const [processandoLote, setProcessandoLote] = useState(false);
-  const [modalDispensa, setModalDispensa] = useState(null); // { tipo: 'individual'|'lote', alvo }
+  const [modalDispensa, setModalDispensa] = useState(null);
   const [justificativaInput, setJustificativaInput] = useState('');
   const navigate = useNavigate();
 
@@ -120,7 +122,6 @@ export default function Mensal() {
     else setSelecionadas(idsPendentes);
   }
 
-  // Marca como entregue diretamente (sem abrir a empresa) — uma linha
   async function marcarEntregueRapido(linha) {
     setProcessandoLote(true);
     try {
@@ -133,7 +134,6 @@ export default function Mensal() {
     finally { setProcessandoLote(false); }
   }
 
-  // Abre modal de dispensa (individual)
   function abrirDispensaIndividual(linha) {
     setModalDispensa({ tipo: 'individual', alvo: linha });
     setJustificativaInput('');
@@ -180,7 +180,6 @@ export default function Mensal() {
 
   return (
     <div>
-      {/* Modal de justificativa de dispensa */}
       {modalDispensa && (
         <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
           <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -216,7 +215,6 @@ export default function Mensal() {
         </div>
       )}
 
-      {/* KPIs */}
       {(emAtraso > 0 || proximoVenc > 0 || concluidas > 0) && (
         <div className="grid grid-cols-3 gap-3 mb-4">
           <div className="card p-3 flex items-center gap-3 cursor-pointer hover:bg-surface2"
@@ -245,7 +243,6 @@ export default function Mensal() {
         </div>
       )}
 
-      {/* Filtros */}
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <input className="input max-w-xs" placeholder="Buscar empresa ou tarefa..."
           value={busca} onChange={e => setBusca(e.target.value)} />
@@ -271,7 +268,6 @@ export default function Mensal() {
         <span className="text-xs text-faint ml-auto">{filtradas.length} entrega(s)</span>
       </div>
 
-      {/* Barra de ações em lote */}
       {selecionadas.length > 0 && (
         <div className="flex items-center gap-3 mb-4 px-4 py-2.5 bg-blue-50 border border-blue-200 rounded-xl">
           <span className="text-sm font-semibold text-blue-800">{selecionadas.length} selecionada(s)</span>
@@ -390,7 +386,6 @@ export default function Mensal() {
                     )}
                   </td>
 
-                  {/* Ações rápidas fora da tarefa */}
                   <td className="px-4 py-3">
                     {!l.concluido && (
                       <div className="flex items-center gap-2 justify-end">
