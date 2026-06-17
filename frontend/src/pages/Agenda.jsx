@@ -7,6 +7,11 @@ const hoje = () => { const d = new Date(); d.setHours(0,0,0,0); return d; };
 
 const DIAS_ATE_EXCLUIR = 30;
 
+const formVazio = {
+  titulo: '', descricao: '', dataInicio: '', dataLimite: '', empresaId: '',
+  enviarParaTarefas: false, diaVencimento: '', isDiaUtil: false
+};
+
 export default function Agenda() {
   const { usuario, isGestor } = useAuth();
   const [eventos, setEventos] = useState([]);
@@ -19,9 +24,7 @@ export default function Agenda() {
   const [empresas, setEmpresas] = useState([]);
   const [salvando, setSalvando] = useState(false);
   const [busca, setBusca] = useState('');
-  const [form, setForm] = useState({
-    titulo: '', descricao: '', dataInicio: '', dataLimite: '', empresaId: ''
-  });
+  const [form, setForm] = useState(formVazio);
 
   useEffect(() => {
     carregarEventos();
@@ -55,11 +58,14 @@ export default function Agenda() {
         descricao: evento.descricao || '',
         dataInicio: evento.dataInicio?.slice(0, 10) || '',
         dataLimite: evento.dataLimite?.slice(0, 10) || '',
-        empresaId: evento.empresaId || ''
+        empresaId: evento.empresaId || '',
+        enviarParaTarefas: Boolean(evento.grupoTarefaId),
+        diaVencimento: evento.grupoTarefa?.diaVencimento || '',
+        isDiaUtil: evento.grupoTarefa?.isDiaUtil || false,
       });
     } else {
       setEditando(null);
-      setForm({ titulo: '', descricao: '', dataInicio: '', dataLimite: '', empresaId: '' });
+      setForm(formVazio);
     }
     setMostraForm(true);
     window.scrollTo(0, 0);
@@ -67,6 +73,10 @@ export default function Agenda() {
 
   async function salvar(e) {
     e.preventDefault();
+    if (form.enviarParaTarefas && !form.empresaId) {
+      alert('Selecione uma empresa para enviar a tarefa ao Controle Mensal.');
+      return;
+    }
     setSalvando(true);
     try {
       if (editando) {
@@ -76,6 +86,7 @@ export default function Agenda() {
       }
       setMostraForm(false);
       setEditando(null);
+      setForm(formVazio);
       carregarEventos();
     } catch (err) {
       alert(err.response?.data?.error || 'Erro ao salvar');
@@ -95,7 +106,7 @@ export default function Agenda() {
   }
 
   async function excluir(id) {
-    if (!window.confirm('Excluir este evento?')) return;
+    if (!window.confirm('Excluir este evento? Se houver tarefa vinculada no Controle Mensal, ela também será removida.')) return;
     await api.delete(`/agenda/${id}`);
     carregarEventos();
   }
@@ -190,7 +201,7 @@ export default function Agenda() {
             <div className="col-span-2">
               <label className="label">Empresa <span className="text-faint">(opcional)</span></label>
               <select className="select" value={form.empresaId}
-                onChange={e => setForm(f => ({ ...f, empresaId: e.target.value }))}>
+                onChange={e => setForm(f => ({ ...f, empresaId: e.target.value, enviarParaTarefas: e.target.value ? f.enviarParaTarefas : false }))}>
                 <option value="">Sem empresa vinculada</option>
                 {empresas.map(emp => (
                   <option key={emp.id} value={emp.id}>{emp.razaoSocial}</option>
@@ -203,6 +214,48 @@ export default function Agenda() {
                 onChange={e => setForm(f => ({ ...f, descricao: e.target.value }))}
                 placeholder="Detalhes do evento..." />
             </div>
+
+            {/* Toggle: enviar para Controle Mensal */}
+            {form.empresaId && (
+              <div className="col-span-2">
+                <div onClick={() => setForm(f => ({ ...f, enviarParaTarefas: !f.enviarParaTarefas }))}
+                  className="flex items-center justify-between p-3 bg-surface2 rounded-lg cursor-pointer select-none hover:bg-border transition-colors">
+                  <div>
+                    <span className="text-sm font-medium text-ink">Enviar para o Controle Mensal?</span>
+                    <p className="text-xs text-faint mt-0.5">
+                      Cria uma tarefa pontual para esta empresa, visível no Controle Mensal com prazo próprio.
+                    </p>
+                  </div>
+                  <div className={`w-9 h-5 rounded-full relative transition-colors flex-shrink-0 ml-3 ${form.enviarParaTarefas ? 'bg-ink' : 'bg-border2'}`}>
+                    <div className={`w-4 h-4 rounded-full bg-white absolute top-0.5 transition-transform ${form.enviarParaTarefas ? 'translate-x-4' : 'translate-x-0.5'}`}
+                      style={{ boxShadow: '0 1px 3px rgba(0,0,0,.2)' }} />
+                  </div>
+                </div>
+
+                {form.enviarParaTarefas && (
+                  <div className="grid grid-cols-2 gap-3 mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div>
+                      <label className="label">Dia de vencimento</label>
+                      <input className="input h-9" type="number" min="1" max="31"
+                        value={form.diaVencimento}
+                        onChange={e => setForm(f => ({ ...f, diaVencimento: e.target.value }))}
+                        placeholder="Em branco usa a data limite/início" />
+                    </div>
+                    <div className="flex items-end pb-1">
+                      <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+                        <input type="checkbox" checked={form.isDiaUtil}
+                          onChange={e => setForm(f => ({ ...f, isDiaUtil: e.target.checked }))}
+                          className="accent-ink" />
+                        É dia útil (não calendário)
+                      </label>
+                    </div>
+                    <p className="col-span-2 text-[11px] text-blue-700">
+                      A tarefa aparecerá no Controle Mensal apenas no mês da data informada (limite ou início), seguindo as mesmas regras de prazo e urgência das demais tarefas.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div className="flex gap-3 mt-4">
             <button type="submit" disabled={salvando} className="btn btn-primary">
@@ -210,7 +263,7 @@ export default function Agenda() {
                 ? <span className="w-4 h-4 border-2 border-bg border-t-transparent rounded-full animate-spin" />
                 : editando ? 'Salvar alterações' : 'Criar evento'}
             </button>
-            <button type="button" onClick={() => setMostraForm(false)} className="btn btn-secondary">Cancelar</button>
+            <button type="button" onClick={() => { setMostraForm(false); setForm(formVazio); }} className="btn btn-secondary">Cancelar</button>
           </div>
         </form>
       )}
@@ -293,9 +346,14 @@ export default function Agenda() {
                       status === 'futuro'    ? 'bg-blue-400' : 'bg-amber-400'
                     }`} />
                     <div className="flex-1 min-w-0">
-                      <p className={`text-sm font-semibold ${ev.concluido ? 'line-through text-faint' : 'text-ink'}`}>
-                        {ev.titulo}
-                      </p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className={`text-sm font-semibold ${ev.concluido ? 'line-through text-faint' : 'text-ink'}`}>
+                          {ev.titulo}
+                        </p>
+                        {ev.grupoTarefaId && (
+                          <span className="pill pill-blue text-[10px]">📋 No Controle Mensal</span>
+                        )}
+                      </div>
                       {ev.empresa && (
                         <p className="text-xs text-blue-600 mt-0.5">{ev.empresa.razaoSocial}</p>
                       )}
