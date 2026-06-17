@@ -164,12 +164,11 @@ export default function Layout() {
             <button onClick={() => mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
           </div>
           <SinoNotificacoes />
-          {isGestor && (
-            <button onClick={() => navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
-              style={{ background: cfg.corPrimaria }}>
-              <span className="text-base leading-none">+</span> Nova Empresa
-            </button>
-          )}
+          {/* Nova Empresa — disponível para todos os níveis */}
+          <button onClick={() => navigate('/empresas/nova')} className="btn gap-1.5 text-white border-0"
+            style={{ background: cfg.corPrimaria }}>
+            <span className="text-base leading-none">+</span> Nova Empresa
+          </button>
         </header>
         <main className="flex-1 overflow-y-auto p-6">
           <Outlet context={{ competencia, mes, ano }} />
