@@ -47,7 +47,7 @@ export default function Layout() {
     if (isGestor) api.get('/responsaveis').then(r => setResponsaveis(r.data)).catch(() => {});
   }, [isGestor]);
 
-  const competencia = `${ano}-${String(mes + 1).padStart(2, '00')}`;
+  const competencia = `${ano}-${String(mes + 1).padStart(2, '0')}`;
 
   function mudarMes(d) {
     let nm = mes + d, na = ano;
@@ -110,7 +110,8 @@ export default function Layout() {
         </nav>
 
         <div className="px-2 pt-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
-          <div className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-colors"
+          <div onClick={() => navigate('/perfil')}
+            className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-pointer group transition-colors"
             onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.1)'}
             onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
             <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-semibold text-white flex-shrink-0"
@@ -121,12 +122,12 @@ export default function Layout() {
               <p className="text-xs font-semibold text-white truncate">{usuario?.nome}</p>
               <p className="text-[10px]" style={{ color: 'rgba(255,255,255,0.5)' }}>{usuario?.nivel}</p>
             </div>
-            <button onClick={logout} className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
+            <button onClick={e => { e.stopPropagation(); logout(); }}
+              className="opacity-0 group-hover:opacity-100 transition-opacity text-xs"
               style={{ color: 'rgba(255,100,100,0.8)' }}>Sair</button>
           </div>
         </div>
 
-        {/* Rodapé Códex */}
         <div className="px-4 py-3 flex items-center gap-2" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           <CodexLogo />
           <div className="min-w-0">
@@ -154,7 +155,6 @@ export default function Layout() {
               <div className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-faint text-[10px]">▼</div>
             </div>
           )}
-          {/* Navegação de competência */}
           <div className="flex items-center gap-2">
             <button onClick={() => mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
             <div className="text-center min-w-[160px]">
