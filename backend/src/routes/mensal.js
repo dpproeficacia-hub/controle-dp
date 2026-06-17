@@ -7,6 +7,12 @@ const prisma = new PrismaClient();
 
 router.use(authMiddleware);
 
+// Compara competências no formato "YYYY-MM" — retorna true se a (comp) já alcançou o início (inicio)
+function competenciaAlcancada(competencia, inicioCompetenciaStr) {
+  if (!inicioCompetenciaStr) return true;
+  return competencia >= inicioCompetenciaStr; // comparação de string "YYYY-MM" funciona lexicograficamente
+}
+
 router.get('/:competencia', async (req, res) => {
   try {
     const { competencia } = req.params;
@@ -26,7 +32,7 @@ router.get('/:competencia', async (req, res) => {
       select: {
         id: true, razaoSocial: true, cnpj: true, tipoDocumento: true,
         enquadramento: true, anexoSimples: true, tipo: true, nivel: true,
-        prazoEntrega: true, cidade: true, estado: true,
+        prazoEntrega: true, cidade: true, estado: true, competenciaInicial: true,
         temFuncionarios: true, temProLabore: true,
         semMovimento: true, fatorR: true, enviaReinf: true, participaTarefas: true,
         responsavel: { select: { id: true, nome: true } },
@@ -34,14 +40,14 @@ router.get('/:competencia', async (req, res) => {
           where: { ativo: true },
           select: {
             id: true, nome: true, diaVencimento: true,
-            isDiaUtil: true, mesSubsequente: true, tipo: true
+            isDiaUtil: true, mesSubsequente: true, tipo: true, inicioCobrancaEm: true
           }
         },
         historicos: {
           where: { competencia },
           select: {
             id: true, status: true,
-            entregasGrupo: { select: { grupoId: true, entregue: true, dispensada: true } }
+            entregasGrupo: { select: { grupoId: true, entregue: true, dispensada: true, justificativa: true } }
           }
         }
       },
@@ -65,6 +71,23 @@ router.get('/:competencia', async (req, res) => {
       const entregaMap = Object.fromEntries(entregasGrupo.map(e => [e.grupoId, e]));
 
       for (const grupo of emp.gruposTarefa) {
+        // Calcula a competência mínima exigida pra essa tarefa nessa empresa:
+        // o mais restritivo entre o início de cobrança da tarefa e a competência inicial da empresa
+        const inicioTarefaStr = grupo.inicioCobrancaEm
+          ? `${grupo.inicioCobrancaEm.getUTCFullYear()}-${String(grupo.inicioCobrancaEm.getUTCMonth() + 1).padStart(2, '0')}`
+          : null;
+        const inicioEmpresaStr = emp.competenciaInicial || null;
+
+        let competenciaMinima = null;
+        if (inicioTarefaStr && inicioEmpresaStr) {
+          competenciaMinima = inicioTarefaStr > inicioEmpresaStr ? inicioTarefaStr : inicioEmpresaStr;
+        } else {
+          competenciaMinima = inicioTarefaStr || inicioEmpresaStr || null;
+        }
+
+        // Se a competência pedida é anterior à mínima exigida, esta tarefa NÃO é cobrada nesse mês
+        if (competenciaMinima && competencia < competenciaMinima) continue;
+
         const entrega = entregaMap[grupo.id];
         const entregue = entrega?.entregue || false;
         const dispensada = entrega?.dispensada || false;
@@ -109,6 +132,7 @@ router.get('/:competencia', async (req, res) => {
           diasRestantes,
           entregue,
           dispensada,
+          justificativa: entrega?.justificativa || null,
           concluido,
           _bolinha: bolinha,
         });
@@ -123,9 +147,7 @@ router.get('/:competencia', async (req, res) => {
 
     const filtrado = status === 'FINALIZADO'
       ? linhas.filter(l => l.concluido)
-      : status === 'NAO_INICIADO'
-      ? linhas.filter(l => !l.concluido)
-      : status === 'PARCIAL'
+      : status === 'NAO_INICIADO' || status === 'PARCIAL'
       ? linhas.filter(l => !l.concluido)
       : linhas;
 
@@ -167,6 +189,69 @@ router.post('/:competencia/:empresaId', async (req, res) => {
       });
     }
     res.json(historico);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Ação em lote: concluir (marcar entregue) ou dispensar várias linhas (empresa+grupo) de uma vez
+router.post('/lote/:competencia', async (req, res) => {
+  try {
+    const { competencia } = req.params;
+    const { itens, acao, justificativa } = req.body;
+    // itens: [{ empresaId, grupoId }]
+    if (!Array.isArray(itens) || itens.length === 0) {
+      return res.status(400).json({ error: 'Nenhum item selecionado.' });
+    }
+    if (!['entregar', 'dispensar'].includes(acao)) {
+      return res.status(400).json({ error: 'Ação inválida.' });
+    }
+
+    const resultados = [];
+    for (const item of itens) {
+      const { empresaId, grupoId } = item;
+
+      let historico = await prisma.historicoMensal.findUnique({
+        where: { empresaId_competencia: { empresaId, competencia } }
+      });
+      if (!historico) {
+        historico = await prisma.historicoMensal.create({
+          data: { empresaId, competencia, responsavelId: req.user.id }
+        });
+      }
+
+      const dataAtual = new Date().toISOString().slice(0, 10);
+
+      const entregaGrupo = await prisma.entregaGrupo.upsert({
+        where: { grupoId_historicoId: { grupoId, historicoId: historico.id } },
+        create: {
+          grupoId, historicoId: historico.id,
+          entregue: acao === 'entregar',
+          dispensada: acao === 'dispensar',
+          dataEntrega: acao === 'entregar' ? dataAtual : null,
+          justificativa: acao === 'dispensar' ? (justificativa || null) : null,
+        },
+        update: {
+          entregue: acao === 'entregar',
+          dispensada: acao === 'dispensar',
+          dataEntrega: acao === 'entregar' ? dataAtual : null,
+          justificativa: acao === 'dispensar' ? (justificativa || null) : null,
+        }
+      });
+
+      // Recalcula status do histórico
+      const todasEntregas = await prisma.entregaGrupo.findMany({ where: { historicoId: historico.id } });
+      const todosGrupos = await prisma.grupoTarefa.findMany({ where: { empresaId, ativo: true } });
+      const concluidos = todasEntregas.filter(e => e.entregue || e.dispensada).length;
+      let status = 'NAO_INICIADO';
+      if (todosGrupos.length > 0 && concluidos >= todosGrupos.length) status = 'FINALIZADO';
+      else if (concluidos > 0) status = 'PARCIAL';
+      await prisma.historicoMensal.update({ where: { id: historico.id }, data: { status } });
+
+      resultados.push(entregaGrupo);
+    }
+
+    res.json({ ok: true, total: resultados.length });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
