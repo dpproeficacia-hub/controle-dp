@@ -157,9 +157,19 @@ export default function Layout() {
           )}
           <div className="flex items-center gap-2">
             <button onClick={() => mudarMes(-1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">‹</button>
-            <div className="text-center min-w-[160px]">
+            <div className="text-center min-w-[160px] relative">
               <p className="text-[9px] font-semibold uppercase tracking-widest text-faint">Competência</p>
-              <p className="text-sm font-semibold text-ink">{MESES[mes]} / {ano}</p>
+              <p className="text-sm font-semibold text-ink cursor-pointer">{MESES[mes]} / {ano}</p>
+              <input
+                type="month"
+                value={`${ano}-${String(mes + 1).padStart(2, '0')}`}
+                onChange={e => {
+                  const [novoAno, novoMes] = e.target.value.split('-').map(Number);
+                  if (novoAno && novoMes) { setAno(novoAno); setMes(novoMes - 1); }
+                }}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                title="Escolher competência no calendário"
+              />
             </div>
             <button onClick={() => mudarMes(1)} className="w-7 h-7 rounded-lg border border-border bg-surface flex items-center justify-center text-muted hover:bg-surface2 text-sm">›</button>
           </div>
