@@ -275,7 +275,11 @@ router.post('/lote/:competencia', async (req, res) => {
     res.json({ ok: true, total: resultados.length });
   } catch (e) {
     console.error('POST /lote/:competencia erro completo:', e);
-    res.status(500).json({ error: e.message, code: e.code, meta: e.meta });
+    res.status(500).json({
+      error: '##### TESTE MARCOS V2 ##### ' + e.message,
+      code: e.code,
+      meta: e.meta
+    });
   }
 });
 
