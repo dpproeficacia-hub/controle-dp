@@ -207,9 +207,30 @@ router.post('/lote/:competencia', async (req, res) => {
       return res.status(400).json({ error: 'Ação inválida.' });
     }
 
+    console.log('LOTE recebido:', JSON.stringify({ competencia, itens, acao, userEscritorioId: req.user.escritorioId }));
+
     const resultados = [];
     for (const item of itens) {
       const { empresaId, grupoId } = item;
+
+      // Verificação explícita antes de tentar criar, para diagnosticar com precisão
+      const empresaExiste = await prisma.empresa.findUnique({ where: { id: empresaId } });
+      if (!empresaExiste) {
+        console.error('LOTE erro: empresaId não encontrado no banco no momento da escrita ->', empresaId);
+        return res.status(404).json({
+          error: `Empresa não encontrada (id: ${empresaId}). Pode ter sido excluída ou recriada — atualize a página e tente novamente.`,
+          empresaIdRecebido: empresaId
+        });
+      }
+
+      const grupoExiste = await prisma.grupoTarefa.findUnique({ where: { id: grupoId } });
+      if (!grupoExiste) {
+        console.error('LOTE erro: grupoId não encontrado no banco no momento da escrita ->', grupoId);
+        return res.status(404).json({
+          error: `Tarefa não encontrada (id: ${grupoId}). Atualize a página e tente novamente.`,
+          grupoIdRecebido: grupoId
+        });
+      }
 
       let historico = await prisma.historicoMensal.findUnique({
         where: { empresaId_competencia: { empresaId, competencia } }
@@ -253,7 +274,8 @@ router.post('/lote/:competencia', async (req, res) => {
 
     res.json({ ok: true, total: resultados.length });
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    console.error('POST /lote/:competencia erro completo:', e);
+    res.status(500).json({ error: e.message, code: e.code, meta: e.meta });
   }
 });
 
